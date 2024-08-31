@@ -3,16 +3,16 @@ import argparse
 import asyncio
 import logging
 import re
-from functools import partial
 
-import whisper_trt
-from whisper.tokenizer import Tokenizer
-from whisper_trt import ModelDimensions, AudioEncoderTRT, TextDecoderTRT
+
 from wyoming.info import AsrModel, AsrProgram, Attribution, Info
 from wyoming.server import AsyncServer
 
 from . import __version__
 from .handler import WhisperTrtEventHandler
+from functools import partial
+
+from whisper_trt import load_trt_model  # Import the function to load the model
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -22,9 +22,9 @@ async def main() -> None:
     parser.add_argument(
         "--model",
         required=True,
-        help="Name of whisper model to use",
+        help="Name of whisper model to use (e.g., 'tiny.en', 'base.en', 'small.en')",
         nargs='?',
-        const="tiny"
+        const="tiny.en"
     )
     parser.add_argument("--uri", required=True, help="unix:// or tcp://")
     parser.add_argument(
@@ -39,12 +39,8 @@ async def main() -> None:
     )
     parser.add_argument(
         "--device",
-        default="cpu",
-        help="Device to use for inference (default: cpu)",
-    )
-    parser.add_argument(
-        "--language",
-        help="Default language to set for transcription",
+        default="cuda",
+        help="Device to use for inference (default: cuda)",
     )
     parser.add_argument(
         "--compute-type",
@@ -82,13 +78,6 @@ async def main() -> None:
     _LOGGER.debug(args)
 
     model_name = args.model
-    match = re.match(r"^(tiny|base|small|medium)", args.model)
-    if match:
-        # Original models re-uploaded to huggingface
-        model_size = match.group(1)
-        model_name = f"{model_size}"
-        args.model = f"whisper-{model_name}"
-
     if args.language == "auto":
         # Whisper does not understand "auto"
         args.language = None
@@ -113,47 +102,17 @@ async def main() -> None:
                             url="https://huggingface.co/OpenAI",
                         ),
                         installed=True,
-                        languages=tokenizer.LANGUAGE_CODES,  # Access languages from the tokenizer
-                        version=whisper_trt.__version__,
+                        languages=load_trt_model(model_name).tokenizer.LANGUAGE_CODES,  # Access languages from the tokenizer
+                        version=__version__,
                     )
                 ],
             )
         ],
     )
 
-    # Load model
-    _LOGGER.debug("Loading %s", args.model)
-    # Initialize the Tokenizer
-    # Assuming you have a way to get encoding and num_languages, replace '...' with actual values
-    encoding = ...  # Obtain the correct encoding instance (not a string)
-    num_languages = ...  # Set the number of languages supported
-
-    tokenizer = Tokenizer(encoding=encoding, num_languages=num_languages)
-
-    # Initialize ModelDimensions
-    dims = ModelDimensions(
-        n_text_ctx=...,
-        n_audio_ctx=...,
-        n_mels=...,
-        # Other necessary dimensions
-    )
-
-    # Initialize AudioEncoderTRT
-    encoder = AudioEncoderTRT(
-        # Add necessary initialization parameters here
-    )
-
-    # Initialize TextDecoderTRT
-    decoder = TextDecoderTRT(
-        # Add necessary initialization parameters here
-    )
-    
-    whisper_model = whisper_trt.WhisperTRT(
-        dims=dims,
-        encoder=encoder,
-        decoder=decoder,
-        tokenizer=tokenizer
-    )
+    # Load WhisperTRT model using the builder function
+    _LOGGER.debug("Loading %s", model_name)
+    whisper_model = load_trt_model(model_name)
 
     server = AsyncServer.from_uri(args.uri)
     _LOGGER.info("Ready")
