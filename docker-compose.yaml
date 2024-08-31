@@ -1,0 +1,16 @@
+---
+services:
+  wyoming-whisper-trt:
+    #TODO: Update this
+    image: docker.io/nalf3in/wyoming-glados:latest
+    container_name: wyoming-glados
+    ports:
+      - 10300:10300
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
