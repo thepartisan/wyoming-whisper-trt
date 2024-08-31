@@ -6,3 +6,4 @@ tensorrt_cu12_libs==10.0.1
 tensorrt_cu12_bindings==10.0.1 
 tensorrt==10.0.1
 packaging==24.1
+onnx-graphsurgeon==0.5.2
