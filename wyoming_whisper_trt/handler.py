@@ -24,7 +24,7 @@ class FasterWhisperEventHandler(AsyncEventHandler):
         self,
         wyoming_info: Info,
         cli_args: argparse.Namespace,
-        model: whisper_trt.WhisperModel,
+        model: whisper_trt.WhisperTRT,
         model_lock: asyncio.Lock,
         *args,
         initial_prompt: Optional[str] = None,
