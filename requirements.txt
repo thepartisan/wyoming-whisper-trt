@@ -1,0 +1,2 @@
+wyoming==1.6.0
+openai-whisper==20231117
