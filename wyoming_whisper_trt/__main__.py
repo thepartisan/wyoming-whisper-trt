@@ -66,6 +66,12 @@ async def main() -> None:
         version=__version__,
         help="Print version and exit",
     )
+    parser.add_argument(
+        "--language",
+        help="Default language to set for transcription",
+        type=str,
+        default="en"  # Set a default value if necessary
+    )
     args = parser.parse_args()
 
     if not args.download_dir:
