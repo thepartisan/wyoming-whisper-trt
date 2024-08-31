@@ -17,7 +17,7 @@ from wyoming.server import AsyncEventHandler
 _LOGGER = logging.getLogger(__name__)
 
 
-class FasterWhisperEventHandler(AsyncEventHandler):
+class WhisperTrtEventHandler(AsyncEventHandler):
     """Event handler for clients."""
 
     def __init__(
