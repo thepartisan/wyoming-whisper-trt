@@ -8,12 +8,12 @@ from functools import partial
 import whisper_trt
 from wyoming.info import AsrModel, AsrProgram, Attribution, Info
 from wyoming.server import AsyncServer
+from whisper.tokenizer import Tokenizer  # Import the Tokenizer directly
 
 from . import __version__
 from .handler import WhisperTrtEventHandler
 
 _LOGGER = logging.getLogger(__name__)
-
 
 async def main() -> None:
     """Main entry point."""
@@ -59,7 +59,6 @@ async def main() -> None:
         "--initial-prompt",
         help="Optional text to provide as a prompt for the first window",
     )
-    #
     parser.add_argument("--debug", action="store_true", help="Log DEBUG messages")
     parser.add_argument(
         "--log-format", default=logging.BASIC_FORMAT, help="Format for log messages"
@@ -93,6 +92,9 @@ async def main() -> None:
         # Whisper does not understand "auto"
         args.language = None
 
+    # Initialize the Tokenizer
+    tokenizer = Tokenizer()  # Initialize the tokenizer
+
     wyoming_info = Info(
         asr=[
             AsrProgram(
@@ -113,7 +115,7 @@ async def main() -> None:
                             url="https://huggingface.co/OpenAI",
                         ),
                         installed=True,
-                        languages=whisper_trt.tokenizer._LANGUAGE_CODES,  # pylint: disable=protected-access
+                        languages=tokenizer.LANGUAGE_CODES,  # Access languages from the tokenizer
                         version=whisper_trt.__version__,
                     )
                 ],
@@ -123,11 +125,11 @@ async def main() -> None:
 
     # Load model
     _LOGGER.debug("Loading %s", args.model)
-    whisper_model = whisper_trt.WhisperModel(
-        args.model,
-        download_root=args.download_dir,
-        device=args.device,
-        compute_type=args.compute_type,
+    whisper_model = whisper_trt.WhisperTRT(
+        dims=whisper_trt.ModelDimensions(...),  # Initialize ModelDimensions with appropriate values
+        encoder=whisper_trt.AudioEncoderTRT(...),  # Initialize AudioEncoderTRT
+        decoder=whisper_trt.TextDecoderTRT(...),  # Initialize TextDecoderTRT
+        tokenizer=tokenizer  # Pass the tokenizer instance here
     )
 
     server = AsyncServer.from_uri(args.uri)
@@ -144,13 +146,10 @@ async def main() -> None:
         )
     )
 
-
 # -----------------------------------------------------------------------------
-
 
 def run() -> None:
     asyncio.run(main())
-
 
 if __name__ == "__main__":
     try:
