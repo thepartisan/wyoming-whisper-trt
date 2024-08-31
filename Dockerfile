@@ -7,8 +7,8 @@ WORKDIR /usr/src
 RUN apt-get update && apt-get install -y python3-venv git \
     && git clone --recursive https://github.com/JonahMMay/wyoming-whisper-trt \
     && cd wyoming-whisper-trt \
-    && chmod +x ./scripts/setup \
-    && ./scripts/setup \
+    && chmod +x ./script/setup \
+    && ./script/setup \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /
