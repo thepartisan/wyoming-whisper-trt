@@ -92,8 +92,10 @@ async def main() -> None:
         # Whisper does not understand "auto"
         args.language = None
 
-    # Initialize the Tokenizer
-    tokenizer = Tokenizer()  # Initialize the tokenizer
+    # Initialize the Tokenizer with appropriate arguments
+    encoding = "english"  # or "english"
+    num_languages = 1  # Adjust based on your model requirements
+    tokenizer = Tokenizer(encoding=encoding, num_languages=num_languages)
 
     wyoming_info = Info(
         asr=[
