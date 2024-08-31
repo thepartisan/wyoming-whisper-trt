@@ -4,15 +4,14 @@ import asyncio
 import logging
 import re
 
-
+from functools import partial
 from wyoming.info import AsrModel, AsrProgram, Attribution, Info
 from wyoming.server import AsyncServer
 
 from . import __version__
 from .handler import WhisperTrtEventHandler
-from functools import partial
 
-from whisper_trt import load_trt_model  # Import the function to load the model
+from whisper_trt import load_trt_model
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -70,8 +69,9 @@ async def main() -> None:
         "--language",
         help="Default language to set for transcription",
         type=str,
-        default="en"  # Set a default value if necessary
+        default="en"
     )
+
     args = parser.parse_args()
 
     if not args.download_dir:
@@ -84,9 +84,25 @@ async def main() -> None:
     _LOGGER.debug(args)
 
     model_name = args.model
-    if args.language == "auto":
-        # Whisper does not understand "auto"
-        args.language = None
+
+    # Ensure the model name is supported by WhisperTRT
+    _LOGGER.debug("Checking model name: %s", model_name)
+    if model_name == "tiny":
+        model_name = "tiny.en"
+    elif model_name == "base":
+        model_name = "base.en"
+    elif model_name == "small":
+        model_name = "small.en"
+    _LOGGER.debug("Using model name: %s", model_name)
+
+    try:
+        # Load WhisperTRT model
+        _LOGGER.debug("Loading model: %s", model_name)
+        whisper_model = load_trt_model(model_name)
+        _LOGGER.debug("Model loaded successfully")
+    except Exception as e:
+        _LOGGER.error("Failed to load model: %s", e)
+        raise
 
     wyoming_info = Info(
         asr=[
@@ -108,7 +124,7 @@ async def main() -> None:
                             url="https://huggingface.co/OpenAI",
                         ),
                         installed=True,
-                        languages=load_trt_model(model_name).tokenizer.LANGUAGE_CODES,  # Access languages from the tokenizer
+                        languages=whisper_model.tokenizer.LANGUAGE_CODES,  # Use tokenizer's language codes
                         version=__version__,
                     )
                 ],
@@ -116,31 +132,44 @@ async def main() -> None:
         ],
     )
 
-    # Load WhisperTRT model using the builder function
-    _LOGGER.debug("Loading %s", model_name)
-    whisper_model = load_trt_model(model_name)
+    try:
+        # Initialize the server
+        _LOGGER.debug("Initializing server with URI: %s", args.uri)
+        server = AsyncServer.from_uri(args.uri)
+        _LOGGER.debug("Server initialized successfully")
+    except Exception as e:
+        _LOGGER.error("Failed to initialize server: %s", e)
+        raise
 
-    server = AsyncServer.from_uri(args.uri)
-    _LOGGER.info("Ready")
+    _LOGGER.info("Server ready and waiting for connections")
+    
     model_lock = asyncio.Lock()
-    await server.run(
-        partial(
-            WhisperTrtEventHandler,
-            wyoming_info,
-            args,
-            whisper_model,
-            model_lock,
-            initial_prompt=args.initial_prompt,
+    try:
+        await server.run(
+            partial(
+                WhisperTrtEventHandler,
+                wyoming_info,
+                args,
+                whisper_model,
+                model_lock,
+                initial_prompt=args.initial_prompt,
+            )
         )
-    )
+    except Exception as e:
+        _LOGGER.error("Error while running the server: %s", e)
+        raise
 
 # -----------------------------------------------------------------------------
 
 def run() -> None:
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        _LOGGER.error("Unhandled exception: %s", e)
+        raise
 
 if __name__ == "__main__":
     try:
         run()
     except KeyboardInterrupt:
-        pass
+        _LOGGER.info("Shutting down due to keyboard interrupt")
