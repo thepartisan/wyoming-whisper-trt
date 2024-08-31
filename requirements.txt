@@ -5,3 +5,4 @@ psutil==6.0.0
 tensorrt_cu12_libs==10.0.1 
 tensorrt_cu12_bindings==10.0.1 
 tensorrt==10.0.1
+packaging==24.1
