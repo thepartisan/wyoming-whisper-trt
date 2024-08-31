@@ -88,6 +88,9 @@ This script demonstrates live transcription using a microphone and voice activit
 python examples/live_transcription.py tiny.en --backend whisper_trt
 ```
 
+### Notes for creating a Docker image
+- docker run --gpus all -it --rm -v local_dir:container_dir nvcr.io/nvidia/tensorrt:24.03-py3 --name wyoming-whisper-trt
+
 
 ## See also
 
