@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y python3-venv git \
     && cd wyoming-whisper-trt \
     && chmod +x ./script/setup \
     && ./script/setup \
+    && chmod +x ./script/run \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /
