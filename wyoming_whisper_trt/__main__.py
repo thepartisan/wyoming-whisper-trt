@@ -6,9 +6,10 @@ import re
 from functools import partial
 
 import whisper_trt
+from whisper.tokenizer import Tokenizer
+from whisper_trt import ModelDimensions, AudioEncoderTRT, TextDecoderTRT
 from wyoming.info import AsrModel, AsrProgram, Attribution, Info
 from wyoming.server import AsyncServer
-from whisper.tokenizer import Tokenizer  # Import the Tokenizer directly
 
 from . import __version__
 from .handler import WhisperTrtEventHandler
@@ -92,11 +93,6 @@ async def main() -> None:
         # Whisper does not understand "auto"
         args.language = None
 
-    # Initialize the encoding and Tokenizer correctly
-    encoding = args.model.tokenizer.encoding  # Get encoding from your model
-    num_languages = 1  # Adjust based on your model's capabilities
-    tokenizer = Tokenizer(encoding=encoding, num_languages=num_languages)
-
     wyoming_info = Info(
         asr=[
             AsrProgram(
@@ -127,6 +123,13 @@ async def main() -> None:
 
     # Load model
     _LOGGER.debug("Loading %s", args.model)
+    # Initialize the Tokenizer
+    # Assuming you have a way to get encoding and num_languages, replace '...' with actual values
+    encoding = ...  # Obtain the correct encoding instance (not a string)
+    num_languages = ...  # Set the number of languages supported
+
+    tokenizer = Tokenizer(encoding=encoding, num_languages=num_languages)
+    
     whisper_model = whisper_trt.WhisperTRT(
         dims=whisper_trt.ModelDimensions(...),  # Initialize ModelDimensions with appropriate values
         encoder=whisper_trt.AudioEncoderTRT(...),  # Initialize AudioEncoderTRT
