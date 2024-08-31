@@ -129,12 +129,30 @@ async def main() -> None:
     num_languages = ...  # Set the number of languages supported
 
     tokenizer = Tokenizer(encoding=encoding, num_languages=num_languages)
+
+    # Initialize ModelDimensions
+    dims = ModelDimensions(
+        n_text_ctx=...,
+        n_audio_ctx=...,
+        n_mels=...,
+        # Other necessary dimensions
+    )
+
+    # Initialize AudioEncoderTRT
+    encoder = AudioEncoderTRT(
+        # Add necessary initialization parameters here
+    )
+
+    # Initialize TextDecoderTRT
+    decoder = TextDecoderTRT(
+        # Add necessary initialization parameters here
+    )
     
     whisper_model = whisper_trt.WhisperTRT(
-        dims=whisper_trt.ModelDimensions(...),  # Initialize ModelDimensions with appropriate values
-        encoder=whisper_trt.AudioEncoderTRT(...),  # Initialize AudioEncoderTRT
-        decoder=whisper_trt.TextDecoderTRT(...),  # Initialize TextDecoderTRT
-        tokenizer=tokenizer  # Pass the tokenizer instance here
+        dims=dims,
+        encoder=encoder,
+        decoder=decoder,
+        tokenizer=tokenizer
     )
 
     server = AsyncServer.from_uri(args.uri)
