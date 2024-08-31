@@ -3,10 +3,12 @@ import argparse
 import subprocess
 import venv
 from pathlib import Path
+import os
 
 _DIR = Path(__file__).parent
 _PROGRAM_DIR = _DIR.parent
 _VENV_DIR = _PROGRAM_DIR / ".venv"
+_TORCH2TRT_DIR = _PROGRAM_DIR / "torch2trt"  # Update this path if torch2trt is located elsewhere
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dev", action="store_true", help="Install dev requirements")
@@ -30,3 +32,10 @@ if args.dev:
     subprocess.check_call(
         pip + ["install", "-r", str(_PROGRAM_DIR / "requirements_dev.txt")]
     )
+
+# Install torch2trt
+os.chdir(_TORCH2TRT_DIR)
+subprocess.check_call([context.env_exe, "setup.py", "install"])
+
+# Optionally, return to the original directory
+os.chdir(_PROGRAM_DIR)
