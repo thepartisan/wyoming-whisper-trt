@@ -22,6 +22,7 @@ async def main() -> None:
         "--model",
         required=True,
         help="Name of whisper model to use",
+        const="tiny"
     )
     parser.add_argument("--uri", required=True, help="unix:// or tcp://")
     parser.add_argument(
