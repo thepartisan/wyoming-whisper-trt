@@ -109,13 +109,15 @@ async def main() -> None:
     _LOGGER.debug("Tokenizer attributes: %s", dir(tokenizer))
 
     try:
-        # Attempt to access LANGUAGE_CODES or another relevant attribute
-        languages = tokenizer.LANGUAGE_CODES
-        _LOGGER.debug("Found language codes: %s", languages)
-    except AttributeError:
-        _LOGGER.error("Tokenizer object has no attribute 'LANGUAGE_CODES'.")
-        # Handling the absence of LANGUAGE_CODES, possibly default to a known set of languages
-        languages = None  # Or some fallback behavior
+        if hasattr(tokenizer, 'get_language'):
+            languages = tokenizer.get_language()  # Example method, replace with correct one
+            _LOGGER.debug("Languages: %s", languages)
+        else:
+            _LOGGER.warning("The Tokenizer object does not have 'get_language'. Exploring other options...")
+            languages = [ 'en' ]  # Handle according to your needs
+    except Exception as e:
+        _LOGGER.error("An error occurred while trying to retrieve languages: %s", e)
+        languages = [ 'en' ] 
 
     wyoming_info = Info(
         asr=[
@@ -137,7 +139,7 @@ async def main() -> None:
                             url="https://huggingface.co/OpenAI",
                         ),
                         installed=True,
-                        languages=whisper_model.tokenizer.LANGUAGE_CODES,  # Use tokenizer's language codes
+                        languages=languages,  # Use tokenizer's language codes
                         version=__version__,
                     )
                 ],
