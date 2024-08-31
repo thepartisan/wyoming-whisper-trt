@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y python3-venv git \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /
-COPY ./docker/run.sh ./
+COPY ./run.sh ./
     
 EXPOSE 10300
     
