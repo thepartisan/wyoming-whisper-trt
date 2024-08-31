@@ -104,6 +104,19 @@ async def main() -> None:
         _LOGGER.error("Failed to load model: %s", e)
         raise
 
+    # Check available attributes in the tokenizer
+    tokenizer = whisper_model.tokenizer
+    _LOGGER.debug("Tokenizer attributes: %s", dir(tokenizer))
+
+    try:
+        # Attempt to access LANGUAGE_CODES or another relevant attribute
+        languages = tokenizer.LANGUAGE_CODES
+        _LOGGER.debug("Found language codes: %s", languages)
+    except AttributeError:
+        _LOGGER.error("Tokenizer object has no attribute 'LANGUAGE_CODES'.")
+        # Handling the absence of LANGUAGE_CODES, possibly default to a known set of languages
+        languages = None  # Or some fallback behavior
+
     wyoming_info = Info(
         asr=[
             AsrProgram(
