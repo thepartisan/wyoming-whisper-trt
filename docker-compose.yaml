@@ -1,9 +1,7 @@
----
 services:
   wyoming-whisper-trt:
-    #TODO: Update this
-    image: docker.io/nalf3in/wyoming-glados:latest
-    container_name: wyoming-glados
+    build: .
+    container_name: wyoming-whisper-trt
     ports:
       - 10300:10300
     restart: unless-stopped
