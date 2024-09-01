@@ -4,7 +4,10 @@ FROM nvcr.io/nvidia/tensorrt:24.08-py3
 WORKDIR /usr/src
 
 # Update and install python3-venv, clone the repository, and run the setup script
-RUN apt-get update && apt-get install -y python3-venv git \
+RUN apt-get update && apt-get install -y \
+    python3-venv \
+    ffmpeg \
+    git \
     && git clone --recursive https://github.com/JonahMMay/wyoming-whisper-trt \
     && cd wyoming-whisper-trt \
     && chmod +x ./script/setup \
