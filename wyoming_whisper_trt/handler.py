@@ -67,10 +67,8 @@ class WhisperTrtEventHandler(AsyncEventHandler):
 
             async with self.model_lock:
                 segments, _info = self.model.transcribe(
-                    self._wav_path,
-                    beam_size=self.cli_args.beam_size,
-                    language=self._language,
-                    initial_prompt=self.initial_prompt,
+                    self._wav_path
+                    # Remove beam_size, language, initial_prompt as they're not supported
                 )
 
             text = " ".join(segment.text for segment in segments)
