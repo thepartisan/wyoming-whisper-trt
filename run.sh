@@ -1,4 +1,5 @@
-#!/usr/bin/env bash
+# Ensure the correct working directory is set
+WORKDIR /usr/src/wyoming-whisper-trt
 
-# Activate the virtual environment and run the script
-/usr/src/wyoming-whisper-trt/.venv/bin/python3 /usr/src/wyoming-whisper-trt/wyoming_whisper_trt/__main__.py --model tiny.en --language en --uri 'tcp://0.0.0.0:10300' --data-dir /data --download-dir /data --debug
+# Run the application using the module option
+CMD ["python3", "-m", "wyoming_whisper_trt", "--model", "tiny.en", "--language", "en", "--uri", "tcp://0.0.0.0:10300", "--data-dir", "/data", "--download-dir", "/data", "--debug"]
