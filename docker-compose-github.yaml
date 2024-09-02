@@ -1,6 +1,6 @@
 services:
   wyoming-whisper-trt:
-    image: captnspdr/wyoming-whisper-trt:latest
+    build: .
     container_name: wyoming-whisper-trt
     ports:
       - 10300:10300
