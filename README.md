@@ -42,10 +42,23 @@ NOTE: The tests on the 4070 Ti returned the results as music instead of text, wh
 
 ## Usage
 
-### Docker
-1. Clone the GitHub repo.
-2. Navigate into the directory.
-3. Run ``docker compose up -d``.
+### Docker Compose (recommended)
+```
+services:
+  wyoming-whisper-trt:
+    image: captnspdr/wyoming-whisper-trt:latest
+    container_name: wyoming-whisper-trt
+    ports:
+      - 10300:10300
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+```
 
 
 ## See also:
