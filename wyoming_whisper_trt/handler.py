@@ -2,6 +2,7 @@
 import argparse
 import asyncio
 import logging
+import time
 import os
 import tempfile
 import wave
@@ -14,8 +15,21 @@ from wyoming.event import Event
 from wyoming.info import Describe, Info
 from wyoming.server import AsyncEventHandler
 
-_LOGGER = logging.getLogger(__name__)
+# Custom nanosecond formatter
+class NanosecondFormatter(logging.Formatter):
+    def formatTime(self, record, datefmt=None):
+        ct = time.time()
+        t = time.localtime(ct)
+        s = time.strftime("%Y-%m-%d %H:%M:%S", t)
+        return f"{s}.{int(ct * 1e9) % 1e9:09.0f}"
 
+# Set up logging with the custom formatter
+formatter = NanosecondFormatter('%(asctime)s [%(levelname)s] %(message)s')
+handler = logging.StreamHandler()
+handler.setFormatter(formatter)
+logging.getLogger().handlers = [handler]
+
+_LOGGER = logging.getLogger(__name__)
 
 class WhisperTrtEventHandler(AsyncEventHandler):
     """Event handler for clients."""
