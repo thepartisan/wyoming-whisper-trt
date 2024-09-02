@@ -2,7 +2,9 @@
 
 This project optimizes [OpenAI Whisper](https://github.com/openai/whisper) with [NVIDIA TensorRT](https://developer.nvidia.com/tensorrt#:~:text=NVIDIA%20TensorRT%2DLLM%20is%20an,on%20the%20NVIDIA%20AI%20platform.).
 
-When executing the ``base.en`` model on NVIDIA Jetson Orin Nano, WhisperTRT runs **~3x faster** while consuming only **~60%** the memory compared with PyTorch.  
+When executing the ``base.en`` model on NVIDIA Jetson Orin Nano, WhisperTRT runs **~3x faster** while consuming only **~60%** the memory compared with PyTorch.
+
+By default, this uses the tiny.en model.
 
 WhisperTRT roughly mimics the API of the original Whisper model, making it easy to use.  
 
@@ -36,63 +38,12 @@ Memory consumption to transcribe 20 seconds of speech on Jetson Orin Nano. See [
 
 ## Usage
 
-### Python
-
-```python3
-from whisper_trt import load_trt_model
-
-model = load_trt_model("tiny.en")
-
-result = model.transcribe("speech.wav") # or pass numpy array
-
-print(result['text'])
-```
-
-> You can download an example speech file from [here](https://www.voiptroubleshooter.com/open_speech/american/OSR_us_000_0010_8k.wav) or 
-> ``wget https://www.voiptroubleshooter.com/open_speech/american/OSR_us_000_0010_8k.wav -O speech.wav``.
+### Docker
+1. Clone the GitHub repo.
+2. Navigate into the directory.
+3. Run ``docker compose up -d``.
 
 
-> You may want to save or load the model to a custom path.  To do so, simply initialize the model like this
-> 
-> ```python3
-> model = load_trt_model("tiny.en", path="./my_folder/tiny_en_trt.pth")
-> ```
-
-### Transcribe
-
-This script simply runs the model once.  
-
-> Please note:  The first time you call load_model, it takes some time to build the TensorRT engine.
-> After the first run, the model will be cached in the directory ~/.cache/whisper_trt/.
-
-```bash
-python examples/transcribe.py tiny.en assets/speech.wav --backend whisper_trt
-```
-
-### Profile Backend
-
-This scripts measures the latency and process memory when transcribing audio. It includes a warmup run for
-more accurate timing.
-
-```bash
-python examples/profile_backend.py tiny.en assets/speech.wav --backend whisper_trt
-```
-
-Backend can be one of "whisper_trt", "whisper", or "faster_whisper".
-
-### Live Transcription
-
-This script demonstrates live transcription using a microphone and voice activity detection.
-
-```bash
-python examples/live_transcription.py tiny.en --backend whisper_trt
-```
-
-### Notes for creating a Docker image
-- docker run --gpus all -it --rm -v local_dir:container_dir nvcr.io/nvidia/tensorrt:24.08-py3 --name wyoming-whisper-trt
-
-
-## See also
-
+## See also:
 - [torch2trt](https://github.com/NVIDIA-AI-IOT/torch2trt) - Used to convert PyTorch model to TensorRT and perform inference.
 - [NanoLLM](https://github.com/dusty-nv/NanoLLM) - Large Language Models targeting NVIDIA Jetson.  Perfect for combining with ASR!
