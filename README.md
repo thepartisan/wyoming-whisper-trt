@@ -6,7 +6,9 @@ When executing the ``base.en`` model on NVIDIA Jetson Orin Nano, WhisperTRT runs
 
 By default, this uses the tiny.en model.
 
-WhisperTRT roughly mimics the API of the original Whisper model, making it easy to use.  
+WhisperTRT roughly mimics the API of the original Whisper model, making it easy to use.
+
+While whisper-trt was originally built for and tested on the Jetson Orin Nano, this project was built and tested on an x86 Ubuntu 24.04 VM with a 4070 Ti.
 
 Check out the [performance](#performance) and [usage](#usage) details below!
 
