@@ -23,20 +23,20 @@ processing a 20 second audio clip.
 Execution time in seconds to transcribe 20 seconds of speech on Jetson Orin Nano. See [profile_backends.py](profile_backends.py) for details.
 
 
-|     | whisper | faster_whisper | whisper_trt |
-|-------|---------|--------------------|--------|
-| tiny.en | 1.74 sec | 0.85 sec | **0.64 sec** |
-| base.en | 2.55 sec | Unavailable | **0.86 sec** |
+|     | whisper (Jetson) | faster_whisper (Jetson) | whisper_trt (Jetson) | whisper (4070 Ti) | faster_whisper (4070 Ti) | whisper_trt (4070 Ti) |
+|-------|---------|--------------------|--------|---------|--------------------|--------|
+| tiny.en | 1.74 sec | 0.85 sec | **0.64 sec** |---------|--------------------|--------|
+| base.en | 2.55 sec | Unavailable | **0.86 sec** |---------|--------------------|--------|
 
 
 ### Memory Consumption
 
 Memory consumption to transcribe 20 seconds of speech on Jetson Orin Nano. See [profile_backends.py](profile_backends.py) for details.
 
-|     | whisper | faster_whisper | whisper_trt |
-|-------|---------|--------------------|--------|
-| tiny.en | 569 MB | **404 MB** | 488 MB |
-| base.en | 666 MB |  Unavailable | **439 MB** |
+|     | whisper (Jetson) | faster_whisper (Jetson) | whisper_trt (Jetson) | whisper (4070 Ti) | faster_whisper (4070 Ti) | whisper_trt (4070 Ti) |
+|-------|---------|--------------------|--------|---------|--------------------|--------|
+| tiny.en | 569 MB | **404 MB** | 488 MB |---------|--------------------|--------|
+| base.en | 666 MB |  Unavailable | **439 MB** |---------|--------------------|--------|
 
 ## Usage
 
