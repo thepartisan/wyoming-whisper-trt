@@ -60,6 +60,15 @@ services:
               capabilities: [gpu]
 ```
 
+### Docker (Latest tag on Docker Hub)
+1. Clone this repository
+2. Browse to the repository root folder
+3. Run ``docker compose up -d``
+
+### Docker (Latest GitHub commit)
+1. Clone this repository
+2. Browse to the repository root folder
+3. Run ``docker compose -f docker-compose-github.yaml up -d``
 
 ## See also:
 - [torch2trt](https://github.com/NVIDIA-AI-IOT/torch2trt) - Used to convert PyTorch model to TensorRT and perform inference.
