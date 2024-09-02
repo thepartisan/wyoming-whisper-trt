@@ -66,12 +66,13 @@ class WhisperTrtEventHandler(AsyncEventHandler):
             self._wav_file = None
 
             async with self.model_lock:
-                segments, _info = self.model.transcribe(
+                result = self.model.transcribe(
                     self._wav_path
                     # Remove beam_size, language, initial_prompt as they're not supported
                 )
 
-            text = " ".join(segment.text for segment in segments)
+            # Since result is a dictionary with a "text" key
+            text = result["text"]
             _LOGGER.info(text)
 
             await self.write_event(Transcript(text=text).event())

@@ -141,15 +141,19 @@ class WhisperTRT(nn.Module):
         self.encoder = encoder
         self.decoder = decoder
         self.tokenizer = tokenizer
+        self.stream = torch.cuda.Stream()  # Create a CUDA stream
 
     def embed_audio(self, mel: Tensor):
-        return self.encoder(mel)    
+       with torch.cuda.stream(self.stream):  # Use the non-default stream
+            return self.encoder(mel)  # Ensure TensorRT operations use the stream    
     
     def logits(self, tokens: torch.Tensor, audio_features: torch.Tensor):
-        return self.decoder(tokens, audio_features)
+        with torch.cuda.stream(self.stream):  # Use the non-default stream
+            return self.decoder(tokens, audio_features)
     
     def forward(self, mel: Tensor, tokens: Tensor):
-        return self.decoder(tokens, self.encoder(mel))
+        with torch.cuda.stream(self.stream):  # Use the non-default stream
+            return self.decoder(tokens, self.encoder(mel))
     
     @torch.no_grad()
     def transcribe(self, audio : str | np.ndarray):
