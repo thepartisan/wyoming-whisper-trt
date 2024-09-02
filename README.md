@@ -26,7 +26,7 @@ Execution time in seconds to transcribe 20 seconds of speech on Jetson Orin Nano
 |     | whisper (Jetson) | faster_whisper (Jetson) | whisper_trt (Jetson) | whisper (4070 Ti) | faster_whisper (4070 Ti) | whisper_trt (4070 Ti) |
 |-------|---------|--------------------|--------|---------|--------------------|--------|
 | tiny.en | 1.74 sec | 0.85 sec | **0.64 sec** | 0.40 sec|--------------------|--------|
-| base.en | 2.55 sec | Unavailable | **0.86 sec** |---------|--------------------|--------|
+| base.en | 2.55 sec | Unavailable | **0.86 sec** | 0.71 sec |--------------------|--------|
 
 
 ### Memory Consumption
@@ -36,7 +36,7 @@ Memory consumption to transcribe 20 seconds of speech on Jetson Orin Nano. See [
 |     | whisper (Jetson) | faster_whisper (Jetson) | whisper_trt (Jetson) | whisper (4070 Ti) | faster_whisper (4070 Ti) | whisper_trt (4070 Ti) |
 |-------|---------|--------------------|--------|---------|--------------------|--------|
 | tiny.en | 569 MB | **404 MB** | 488 MB | 672 MB |--------------------|--------|
-| base.en | 666 MB |  Unavailable | **439 MB** |---------|--------------------|--------|
+| base.en | 666 MB |  Unavailable | **439 MB** | 726 MB |--------------------|--------|
 
 ## Usage
 
