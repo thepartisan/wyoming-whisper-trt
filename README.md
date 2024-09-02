@@ -20,7 +20,7 @@ processing a 20-second audio clip.
 
 ### Execution Time
 
-Execution time in seconds to transcribe 20 seconds of speech on Jetson Orin Nano. See [profile_backends.py](profile_backends.py) for details.
+Execution time in seconds to transcribe 20 seconds of speech on Jetson Orin Nano. See [profile_backends.py](examples/profile_backends.py) for details.
 
 
 |     | whisper (Jetson) | faster_whisper (Jetson) | whisper_trt (Jetson) | whisper (4070 Ti) | faster_whisper (4070 Ti) | whisper_trt (4070 Ti) |
@@ -31,7 +31,7 @@ Execution time in seconds to transcribe 20 seconds of speech on Jetson Orin Nano
 
 ### Memory Consumption
 
-Memory consumption to transcribe 20 seconds of speech on Jetson Orin Nano. See [profile_backends.py](profile_backends.py) for details.
+Memory consumption to transcribe 20 seconds of speech on Jetson Orin Nano. See [profile_backends.py](examples/profile_backends.py) for details.
 
 |     | whisper (Jetson) | faster_whisper (Jetson) | whisper_trt (Jetson) | whisper (4070 Ti) | faster_whisper (4070 Ti) | whisper_trt (4070 Ti) |
 |-------|---------|--------------------|--------|---------|--------------------|--------|
