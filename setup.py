@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 
+import time
 import setuptools
 from setuptools import setup
 
