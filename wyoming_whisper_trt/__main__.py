@@ -21,7 +21,7 @@ from .handler import WhisperTrtEventHandler
 from whisper_trt.cache import get_cache_dir, make_cache_dir
 from whisper_trt.utils import check_file_md5, download_file
 
-from whisper_trt import load_trt_model
+from whisper_trt import load_trt_model, WhisperTRT
 
 # Configure module-specific logger
 logger = logging.getLogger(__name__)
@@ -80,12 +80,12 @@ def normalize_model_name(model_name: str) -> str:
     return normalized_name
 
 
-def extract_languages(tokenizer: whisper_trt.WhisperTRT) -> List[str]:
+def extract_languages(tokenizer: WhisperTRT) -> List[str]:
     """
     Extracts supported languages from the tokenizer.
 
     Args:
-        tokenizer (whisper_trt.WhisperTRT): The Whisper TRT model instance.
+        tokenizer (WhisperTRT): The Whisper TRT model instance.
 
     Returns:
         List[str]: A list of supported language codes.
