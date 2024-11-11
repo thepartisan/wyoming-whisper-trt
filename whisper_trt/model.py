@@ -30,7 +30,7 @@ import whisper
 from whisper import load_model
 from whisper.model import LayerNorm, Tensor, ModelDimensions
 from whisper.tokenizer import Tokenizer
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Union
 from dataclasses import asdict
 import logging
 
