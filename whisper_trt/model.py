@@ -95,9 +95,9 @@ class _TextDecoderEngine(nn.Module):
         self.blocks = blocks
 
     @torch.no_grad()
-    def forward(self, x: Tensor, xa: Tensor, mask: Tensor) -> Tensor:
+    def forward(self, x: Tensor, mask: Tensor) -> Tensor:
         for block in self.blocks:
-            x = block(x, xa, mask, is_causal=True)
+            x = block(x, mask)
         return x
 
 class TextDecoderTRT(nn.Module):
@@ -120,14 +120,14 @@ class TextDecoderTRT(nn.Module):
         self.register_buffer("mask", mask, persistent=False)
 
     @torch.no_grad()
-    def forward(self, x: Tensor, xa: Tensor) -> Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         offset = 0  # For generality; modify if needed
         x = (
             self.token_embedding(x)
             + self.positional_embedding[offset : offset + x.shape[-1]]
         )
         x = x.to(xa.dtype)
-        x = self.engine(x, xa, self.mask)
+        x = self.engine(x, self.mask)
         x = self.ln(x)
         logits = (
             x @ torch.transpose(self.token_embedding.weight.to(x.dtype), 0, 1)
@@ -167,14 +167,14 @@ class WhisperTRT(nn.Module):
         return output
 
     @torch.no_grad()
-    def logits(self, tokens: torch.Tensor, audio_features: torch.Tensor) -> Tensor:
+    def logits(self, tokens: torch.Tensor) -> Tensor:
         with torch.cuda.stream(self.stream):
-            output = self.decoder(tokens, audio_features)
+            output = self.decoder(tokens)
         torch.cuda.current_stream().wait_stream(self.stream)
         return output
 
     @torch.no_grad()
-    def transcribe(self, audio: str | np.ndarray) -> Dict[str, str]:
+    def transcribe(self, audio: Union[str, np.ndarray]) -> Dict[str, str]:
         """
         Transcribes the given audio file or numpy array.
 
