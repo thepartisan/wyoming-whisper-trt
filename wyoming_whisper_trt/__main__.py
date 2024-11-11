@@ -18,8 +18,8 @@ from wyoming.server import AsyncServer
 
 from . import __version__
 from .handler import WhisperTrtEventHandler
-from .cache import get_cache_dir, make_cache_dir
-from .utils import check_file_md5, download_file
+from whisper_trt.cache import get_cache_dir, make_cache_dir
+from whisper_trt.utils import check_file_md5, download_file
 
 from whisper_trt import load_trt_model
 
