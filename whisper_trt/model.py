@@ -25,6 +25,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch2trt
 import tensorrt
+import numpy as np
 import whisper
 from whisper import load_model
 from whisper.model import LayerNorm, Tensor, ModelDimensions
