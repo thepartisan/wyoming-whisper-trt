@@ -97,7 +97,7 @@ class _TextDecoderEngine(nn.Module):
     @torch.no_grad()
     def forward(self, x: Tensor, xa: Tensor, mask: Tensor) -> Tensor:
         for block in self.blocks:
-            x = block(x, xa, mask)
+            x = block(x, xa, mask, is_causal=True)
         return x
 
 class TextDecoderTRT(nn.Module):
