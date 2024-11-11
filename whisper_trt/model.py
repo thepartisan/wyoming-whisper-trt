@@ -1,23 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: MIT
-#
-# Permission is hereby granted, free of charge, to any person obtaining a
-# copy of this software and associated documentation files (the "Software"),
-# to deal in the Software without restriction, including without limitation
-# the rights to use, copy, modify, merge, publish, distribute, sublicense,
-# and/or sell copies of the Software, and to permit persons to whom the
-# Software is furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-# DEALINGS IN THE SOFTWARE.
 
 import os
 import torch
@@ -95,9 +76,9 @@ class _TextDecoderEngine(nn.Module):
         self.blocks = blocks
 
     @torch.no_grad()
-    def forward(self, x: Tensor, mask: Tensor) -> Tensor:
+    def forward(self, x: Tensor, xa: Tensor, mask: Tensor) -> Tensor:
         for block in self.blocks:
-            x = block(x, mask)
+            x = block(x, mask, cross_attn=xa)  # Pass xa as a keyword argument
         return x
 
 class TextDecoderTRT(nn.Module):
@@ -120,14 +101,14 @@ class TextDecoderTRT(nn.Module):
         self.register_buffer("mask", mask, persistent=False)
 
     @torch.no_grad()
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, xa: Tensor) -> Tensor:
         offset = 0  # For generality; modify if needed
         x = (
             self.token_embedding(x)
             + self.positional_embedding[offset : offset + x.shape[-1]]
         )
         x = x.to(xa.dtype)
-        x = self.engine(x, self.mask)
+        x = self.engine(x, xa, self.mask)  # Correct argument order: x, xa, mask
         x = self.ln(x)
         logits = (
             x @ torch.transpose(self.token_embedding.weight.to(x.dtype), 0, 1)
@@ -167,9 +148,9 @@ class WhisperTRT(nn.Module):
         return output
 
     @torch.no_grad()
-    def logits(self, tokens: torch.Tensor) -> Tensor:
+    def logits(self, tokens: torch.Tensor, audio_features: torch.Tensor) -> Tensor:
         with torch.cuda.stream(self.stream):
-            output = self.decoder(tokens)
+            output = self.decoder(tokens, audio_features)
         torch.cuda.current_stream().wait_stream(self.stream)
         return output
 
@@ -217,7 +198,7 @@ class WhisperTRT(nn.Module):
         tokens[0, 0] = self.tokenizer.sot
 
         for i in range(1, self.dims.n_text_ctx):
-            logits = self.logits(tokens[:, :i], audio_features)
+            logits = self.logits(tokens[:, :i], audio_features)  # Now correctly passing two arguments
             next_token = logits[:, -1, :].argmax(dim=-1)
             tokens[0, i] = next_token
             if next_token == self.tokenizer.eot:
@@ -270,6 +251,7 @@ class WhisperTRTBuilder:
                 tensorrt.Logger.VERBOSE if cls.verbose else tensorrt.Logger.ERROR
             ),
         )
+        logger.info("TensorRT engine built successfully.")
         return engine
 
     @classmethod
@@ -288,7 +270,7 @@ class WhisperTRTBuilder:
         shapes = {
             'min': [
                 (1, 1, dims.n_text_state),
-                (1, 1, dims.n_audio_state),
+                (1, dims.n_audio_ctx, dims.n_audio_state),
                 (dims.n_text_ctx, dims.n_text_ctx),
             ],
             'opt': [
@@ -307,7 +289,7 @@ class WhisperTRTBuilder:
             decoder_blocks_module,
             [x, xa, mask],
             shapes,
-            input_names=["x", "xa", "mask"],
+            input_names=["x", "xa", "mask"],  # Ensure the order matches the forward method
             output_names=["output"],
         )
 
@@ -444,8 +426,11 @@ class WhisperTRTBuilder:
         text_mask = tes['mask']
 
         decoder = TextDecoderTRT(
-            text_decoder_engine, text_token_embedding,
-            text_positional_embedding, text_ln, text_mask
+            text_decoder_engine, 
+            text_token_embedding,
+            text_positional_embedding, 
+            text_ln, 
+            text_mask
         )
 
         whisper_trt = WhisperTRT(dims, encoder, decoder, cls.get_tokenizer())
