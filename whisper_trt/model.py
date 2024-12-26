@@ -78,7 +78,7 @@ class _TextDecoderEngine(nn.Module):
     @torch.no_grad()
     def forward(self, x: Tensor, xa: Tensor, mask: Tensor) -> Tensor:
         for block in self.blocks:
-            x = block(x, xa, mask)  # Pass xa as a keyword argument
+            x = block(x, xa, mask, False)  # Pass xa as a keyword argument
         return x
 
 class TextDecoderTRT(nn.Module):
