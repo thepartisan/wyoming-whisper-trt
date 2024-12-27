@@ -77,8 +77,9 @@ class _TextDecoderEngine(nn.Module):
 
     @torch.no_grad()
     def forward(self, x: Tensor, xa: Tensor, mask: Tensor) -> Tensor:
+        # Pass cross-attention (xa) and mask in the order expected by ResidualAttentionBlock
         for block in self.blocks:
-            x = block(x, xa, mask)  # Pass xa as a keyword argument
+            x = block(x, xa, mask)  
         return x
 
 class TextDecoderTRT(nn.Module):
@@ -108,7 +109,8 @@ class TextDecoderTRT(nn.Module):
             + self.positional_embedding[offset : offset + x.shape[-1]]
         )
         x = x.to(xa.dtype)
-        x = self.engine(x, xa, self.mask)  # Correct argument order: x, xa, mask
+        # Correct argument order for the TensorRT engine: (tokens_emb, cross_attn, mask)
+        x = self.engine(x, xa, self.mask)
         x = self.ln(x)
         logits = (
             x @ torch.transpose(self.token_embedding.weight.to(x.dtype), 0, 1)
@@ -118,13 +120,6 @@ class TextDecoderTRT(nn.Module):
 class WhisperTRT(nn.Module):
     """
     A TensorRT-optimized version of the Whisper model for efficient inference.
-
-    Attributes:
-        dims (ModelDimensions): Dimensions of the Whisper model.
-        encoder (AudioEncoderTRT): The audio encoder module optimized with TensorRT.
-        decoder (TextDecoderTRT): The text decoder module optimized with TensorRT.
-        tokenizer (Tokenizer): Tokenizer for encoding and decoding text.
-        stream (torch.cuda.Stream): CUDA stream for asynchronous execution.
     """
     def __init__(
         self,
@@ -156,15 +151,6 @@ class WhisperTRT(nn.Module):
 
     @torch.no_grad()
     def transcribe(self, audio: Union[str, np.ndarray]) -> Dict[str, str]:
-        """
-        Transcribes the given audio file or numpy array.
-
-        Args:
-            audio (str | np.ndarray): Path to the audio file or numpy array of audio data.
-
-        Returns:
-            Dict[str, str]: A dictionary containing the transcribed text.
-        """
         # Load and preprocess audio
         if isinstance(audio, str):
             if not os.path.isfile(audio):
@@ -198,7 +184,7 @@ class WhisperTRT(nn.Module):
         tokens[0, 0] = self.tokenizer.sot
 
         for i in range(1, self.dims.n_text_ctx):
-            logits = self.logits(tokens[:, :i], audio_features)  # Now correctly passing two arguments
+            logits = self.logits(tokens[:, :i], audio_features)
             next_token = logits[:, -1, :].argmax(dim=-1)
             tokens[0, i] = next_token
             if next_token == self.tokenizer.eot:
@@ -259,6 +245,7 @@ class WhisperTRTBuilder:
     def build_text_decoder_engine(cls, model) -> torch2trt.TRTModule:
         dims = model.dims
 
+        # This wraps the actual decoder blocks with _TextDecoderEngine
         decoder_blocks_module = _TextDecoderEngine(
             model.decoder.blocks
         )
@@ -289,7 +276,7 @@ class WhisperTRTBuilder:
             decoder_blocks_module,
             [x, xa, mask],
             shapes,
-            input_names=["x", "xa", "mask"],  # Ensure the order matches the forward method
+            input_names=["x", "xa", "mask"],
             output_names=["output"],
         )
 
@@ -308,7 +295,6 @@ class WhisperTRTBuilder:
         )
 
         n_frames = dims.n_audio_ctx * 2
-
         x = torch.randn(1, dims.n_mels, n_frames).cuda()
         positional_embedding = model.encoder.positional_embedding.cuda().detach()
 
