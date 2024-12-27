@@ -35,10 +35,14 @@ import numpy as np
 import torch.nn as nn
 import torch2trt
 import tensorrt
+import logging  # <-- Make sure you're using logging for debug messages
 
 from dataclasses import asdict
 from .cache import get_cache_dir, make_cache_dir
 from .__version__ import __version__
+
+
+logger = logging.getLogger(__name__)  # logger for debug/info messages
 
 
 class _AudioEncoderEngine(nn.Module):
@@ -67,10 +71,11 @@ class _AudioEncoderEngine(nn.Module):
 
 
 class AudioEncoderTRT(nn.Module):
-    def __init__(self,
-            engine: torch2trt.TRTModule,
-            positional_embedding: torch.Tensor
-        ):
+    def __init__(
+        self,
+        engine: torch2trt.TRTModule,
+        positional_embedding: torch.Tensor
+    ):
         super().__init__()
         self.engine = engine
         self.register_buffer("positional_embedding", positional_embedding)
@@ -96,13 +101,14 @@ class _TextDecoderEngine(nn.Module):
 
 
 class TextDecoderTRT(nn.Module):
-    def __init__(self,
-            engine: torch2trt.TRTModule,
-            token_embedding: nn.Embedding,
-            positional_embedding: nn.Parameter,
-            ln: LayerNorm,
-            mask: torch.Tensor
-        ):
+    def __init__(
+        self,
+        engine: torch2trt.TRTModule,
+        token_embedding: nn.Embedding,
+        positional_embedding: nn.Parameter,
+        ln: LayerNorm,
+        mask: torch.Tensor
+    ):
         super().__init__()
         self.engine = engine
         self.token_embedding = token_embedding
@@ -130,12 +136,13 @@ class TextDecoderTRT(nn.Module):
 
 
 class WhisperTRT(nn.Module):
-    def __init__(self,
-            dims: ModelDimensions,
-            encoder: AudioEncoderTRT,
-            decoder: TextDecoderTRT,
-            tokenizer: Tokenizer | None = None
-        ):
+    def __init__(
+        self,
+        dims: ModelDimensions,
+        encoder: AudioEncoderTRT,
+        decoder: TextDecoderTRT,
+        tokenizer: Tokenizer | None = None
+    ):
         super().__init__()
         self.dims = dims
         self.encoder = encoder
@@ -144,7 +151,7 @@ class WhisperTRT(nn.Module):
         self.stream = torch.cuda.Stream()  # Create a CUDA stream
 
     def embed_audio(self, mel: Tensor):
-       with torch.cuda.stream(self.stream):  # Use the non-default stream
+        with torch.cuda.stream(self.stream):  # Use the non-default stream
             return self.encoder(mel)  # Ensure TensorRT operations use the stream    
     
     def logits(self, tokens: torch.Tensor, audio_features: torch.Tensor):
@@ -152,7 +159,7 @@ class WhisperTRT(nn.Module):
             return self.decoder(tokens, audio_features)
     
     def forward(self, mel: Tensor, tokens: Tensor):
-        with torch.cuda.stream(self.stream):  # Use the non-default stream
+        with torch.cuda.stream(self.stream):
             return self.decoder(tokens, self.encoder(mel))
     
     @torch.no_grad()
@@ -164,7 +171,7 @@ class WhisperTRT(nn.Module):
         mel = whisper.audio.log_mel_spectrogram(audio, padding=whisper.audio.N_SAMPLES)[None, ...].cuda()
 
         if int(mel.shape[2]) > whisper.audio.N_FRAMES:
-            mel = mel[:, :, :whisper.audio.N_FRAMES]
+            mel = mel[:, :, : whisper.audio.N_FRAMES]
             
         audio_features = self.embed_audio(mel)
         
@@ -195,7 +202,6 @@ class WhisperTRTBuilder:
     @classmethod
     @torch.no_grad()
     def build_text_decoder_engine(cls) -> torch2trt.TRTModule:
-
         model = load_model(cls.model).cuda().eval()
         dims = model.dims
 
@@ -238,7 +244,6 @@ class WhisperTRTBuilder:
     @classmethod
     @torch.no_grad()
     def build_audio_encoder_engine(cls) -> torch2trt.TRTModule:
-
         model = load_model(cls.model).cuda().eval()
         dims = model.dims
 
@@ -268,7 +273,7 @@ class WhisperTRTBuilder:
                 (dims.n_audio_ctx, dims.n_audio_state)
             ],
             max_shapes=[
-                (1, dims.n_mels,n_frames),
+                (1, dims.n_mels, n_frames),
                 (dims.n_audio_ctx, dims.n_audio_state)
             ],
             input_names=["x", "positional_embedding"],
@@ -309,7 +314,7 @@ class WhisperTRTBuilder:
     @torch.no_grad()
     def build(cls, output_path: str, verbose: bool = False):
         cls.verbose = verbose
-        
+
         checkpoint = {
             "whisper_trt_version": __version__,
             "dims": asdict(load_model(cls.model).dims),
@@ -366,7 +371,6 @@ class WhisperTRTBuilder:
         
 
         whisper_trt = WhisperTRT(dims, encoder, decoder, cls.get_tokenizer())
-
         whisper_trt = whisper_trt.cuda().eval()
 
         return whisper_trt
@@ -408,7 +412,11 @@ MODEL_BUILDERS = {
     "small.en": SmallEnBuilder
 }
 
+
 def load_trt_model(name: str, path: str | None = None, build: bool = True, verbose: bool = False):
+
+    # 1) Add a debug log (or print) for the torch version:
+    logger.debug(f"Using torch version: {torch.__version__}")
 
     if name not in MODEL_BUILDERS:
         raise RuntimeError(f"Model '{name}' is not supported by WhisperTRT.")
