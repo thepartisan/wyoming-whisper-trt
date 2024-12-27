@@ -40,6 +40,52 @@ from dataclasses import asdict
 from .cache import get_cache_dir, make_cache_dir
 from .__version__ import __version__
 
+import whisper.model as wmodel
+import copy
+
+from torch import Tensor
+from typing import Optional
+
+
+# 1) Keep a reference to the original forward if needed
+_OriginalResidualAttentionBlock_forward = copy.deepcopy(wmodel.ResidualAttentionBlock.forward)
+
+
+# 2) Define the patched forward
+def _PatchedResidualAttentionBlock_forward(
+    self,
+    x: Tensor,
+    xa: Optional[Tensor] = None,
+    mask: Optional[Tensor] = None,
+    kv_cache: Optional[dict] = None,
+):
+    """
+    Monkey-patch to ensure the 'mask' Tensor is used as attn_mask=mask,
+    and 'is_causal' is explicitly a boolean, preventing the
+    'scaled_dot_product_attention(): argument 'is_causal' must be bool, not Tensor' error.
+    """
+
+    # --- Self-Attention ---
+    x = x + self.attn(
+        self.attn_ln(x),
+        attn_mask=mask,    # <--- pass mask as attn_mask
+        is_causal=False,   # <--- ensure this is a bool
+        kv_cache=kv_cache
+    )[0]
+
+    # --- Cross-Attention (if cross_attn is defined) ---
+    if self.cross_attn:
+        x = x + self.cross_attn(
+            self.cross_attn_ln(x),
+            xa,
+            attn_mask=mask,   # <--- if needed for cross-attn
+            is_causal=False,  # <--- again a bool
+            kv_cache=kv_cache
+        )[0]
+
+    # --- MLP ---
+    x = x + self.mlp(self.mlp_ln(x))
+    return x
 
 class _AudioEncoderEngine(nn.Module):
     # Allows for online substition of pos embedding
