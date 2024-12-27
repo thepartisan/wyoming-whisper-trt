@@ -86,6 +86,10 @@ def _PatchedResidualAttentionBlock_forward(
     # --- MLP ---
     x = x + self.mlp(self.mlp_ln(x))
     return x
+    
+wmodel.ResidualAttentionBlock.forward = _PatchedResidualAttentionBlock_forward
+print("[INFO] Patched whisper.model.ResidualAttentionBlock.forward at runtime.")
+
 
 class _AudioEncoderEngine(nn.Module):
     # Allows for online substition of pos embedding
