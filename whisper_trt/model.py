@@ -19,6 +19,57 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+# --------------------------------------------------------------------
+# MONKEY-PATCH for ResidualAttentionBlock to handle is_causal mismatch
+# --------------------------------------------------------------------
+import whisper.model as wmodel
+import copy
+from torch import Tensor
+from typing import Optional
+
+# 1) Save the original forward (optional, in case you want to revert or inspect)
+_OriginalResidualAttentionBlock_forward = copy.deepcopy(wmodel.ResidualAttentionBlock.forward)
+
+# 2) Define the patched forward
+def _PatchedResidualAttentionBlock_forward(
+    self,
+    x: Tensor,
+    xa: Optional[Tensor] = None,
+    mask: Optional[Tensor] = None,
+    kv_cache: Optional[dict] = None,
+):
+    """
+    This patch ensures we do NOT pass 'mask' as 'is_causal' inside MultiHeadAttention.
+    Instead, we respect the original signature used in openai/whisper,
+    which typically calls `mha(..., mask=mask)`.
+    """
+
+    # Example: if your MultiHeadAttention expects (x, xa, mask, kv_cache=...),
+    # just pass them accordingly. Make sure we're not using attn_mask=... or is_causal=...
+
+    x = x + self.attn(
+        self.attn_ln(x),
+        xa,         # cross-attention if needed
+        mask=mask,  # pass as 'mask', not 'is_causal'
+        kv_cache=kv_cache
+    )[0]
+
+    if self.cross_attn:
+        x = x + self.cross_attn(
+            self.cross_attn_ln(x),
+            xa,
+            mask=None,   # or mask=mask if your cross-attn also requires it
+            kv_cache=kv_cache
+        )[0]
+
+    x = x + self.mlp(self.mlp_ln(x))
+    return x
+
+# 3) Override the stock forward
+wmodel.ResidualAttentionBlock.forward = _PatchedResidualAttentionBlock_forward
+print("[INFO] Patched whisper.model.ResidualAttentionBlock.forward at runtime to avoid is_causal mismatch.")
+
+
 import argparse
 from whisper import load_model
 from whisper.model import LayerNorm, Linear, Tensor, ModelDimensions, sinusoids, Whisper
