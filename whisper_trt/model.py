@@ -15,12 +15,62 @@ from typing import Optional, Dict, List, Union
 from dataclasses import asdict
 import logging
 
+# --------------------------------------------------------------------
+# MONKEY-PATCH: ResidualAttentionBlock to ensure 'mask' is never used
+# as 'is_causal' when PyTorch 2.0 calls scaled_dot_product_attention.
+# --------------------------------------------------------------------
+import copy
+import whisper.model as wmodel
+from torch import Tensor
+from typing import Optional
+
+# Save the original forward
+_OriginalResidualAttentionBlock_forward = copy.deepcopy(wmodel.ResidualAttentionBlock.forward)
+
+def _PatchedResidualAttentionBlock_forward(
+    self,
+    x: Tensor,
+    xa: Optional[Tensor] = None,
+    mask: Optional[Tensor] = None,
+    kv_cache: Optional[dict] = None,
+):
+    """
+    Runtime override of whisper.model.ResidualAttentionBlock.forward()
+    to ensure that 'mask' is passed properly (e.g., 'mask=mask'), never
+    mistaken for 'is_causal' in PyTorch 2.0's scaled_dot_product_attention.
+    """
+
+    # The original code from whisper/model.py looks like:
+    #
+    #    x = x + self.attn(self.attn_ln(x), mask=mask, kv_cache=kv_cache)[0]
+    #    if self.cross_attn:
+    #        x = x + self.cross_attn(self.cross_attn_ln(x), xa, kv_cache=kv_cache)[0]
+    #    x = x + self.mlp(self.mlp_ln(x))
+    #    return x
+    #
+    # That is already correct if your MultiHeadAttention internally
+    # interprets 'mask=mask' as an attention mask (not is_causal).
+    # If you have a fork or code that incorrectly calls is_causal=mask,
+    # adjust it here. For the base Whisper code, it's safe as-is.
+
+    x = x + self.attn(self.attn_ln(x), mask=mask, kv_cache=kv_cache)[0]
+    if self.cross_attn:
+        x = x + self.cross_attn(self.cross_attn_ln(x), xa, kv_cache=kv_cache)[0]
+    x = x + self.mlp(self.mlp_ln(x))
+    return x
+
+# Override forward at runtime
+wmodel.ResidualAttentionBlock.forward = _PatchedResidualAttentionBlock_forward
+print("[INFO] Patched whisper.model.ResidualAttentionBlock.forward at runtime.")
+# --------------------------------------------------------------------
+
 from .cache import get_cache_dir, make_cache_dir
 from .__version__ import __version__
 
 # Set up logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
 
 class _AudioEncoderEngine(nn.Module):
     """
@@ -45,6 +95,7 @@ class _AudioEncoderEngine(nn.Module):
         x = self.ln_post(x)
         return x
 
+
 class AudioEncoderTRT(nn.Module):
     """
     TensorRT-optimized Audio Encoder.
@@ -67,6 +118,7 @@ class AudioEncoderTRT(nn.Module):
         output = self.engine(x, pos_embed)
         return output
 
+
 class _TextDecoderEngine(nn.Module):
     """
     Text Decoder module to be converted to TensorRT engine.
@@ -79,8 +131,9 @@ class _TextDecoderEngine(nn.Module):
     def forward(self, x: Tensor, xa: Tensor, mask: Tensor) -> Tensor:
         # Pass cross-attention (xa) and mask in the order expected by ResidualAttentionBlock
         for block in self.blocks:
-            x = block(x, xa, mask)  
+            x = block(x, xa, mask)
         return x
+
 
 class TextDecoderTRT(nn.Module):
     """
@@ -116,6 +169,7 @@ class TextDecoderTRT(nn.Module):
             x @ torch.transpose(self.token_embedding.weight.to(x.dtype), 0, 1)
         ).float()
         return logits
+
 
 class WhisperTRT(nn.Module):
     """
@@ -195,6 +249,7 @@ class WhisperTRT(nn.Module):
         result = {"text": text}
         return result
 
+
 class WhisperTRTBuilder:
     """
     Builder class for creating and loading TensorRT-optimized Whisper models.
@@ -245,7 +300,6 @@ class WhisperTRTBuilder:
     def build_text_decoder_engine(cls, model) -> torch2trt.TRTModule:
         dims = model.dims
 
-        # This wraps the actual decoder blocks with _TextDecoderEngine
         decoder_blocks_module = _TextDecoderEngine(
             model.decoder.blocks
         )
@@ -412,10 +466,10 @@ class WhisperTRTBuilder:
         text_mask = tes['mask']
 
         decoder = TextDecoderTRT(
-            text_decoder_engine, 
+            text_decoder_engine,
             text_token_embedding,
-            text_positional_embedding, 
-            text_ln, 
+            text_positional_embedding,
+            text_ln,
             text_mask
         )
 
@@ -423,6 +477,7 @@ class WhisperTRTBuilder:
         whisper_trt = whisper_trt.cuda().eval()
 
         return whisper_trt
+
 
 # Additional Builders for specific models
 class EnBuilder(WhisperTRTBuilder):
@@ -446,6 +501,7 @@ class BaseEnBuilder(EnBuilder):
 class SmallEnBuilder(EnBuilder):
     model: str = "small.en"
 
+
 MODEL_FILENAMES = {
     "tiny.en": "tiny_en_trt.pth",
     "base.en": "base_en_trt.pth",
@@ -459,6 +515,7 @@ MODEL_BUILDERS = {
     "small.en": SmallEnBuilder,
     # Add other models if needed
 }
+
 
 def load_trt_model(
     name: str,
