@@ -68,10 +68,11 @@ def _PatchedResidualAttentionBlock_forward(
     # --- Self-Attention ---
     x = x + self.attn(
         self.attn_ln(x),
-        attn_mask=mask,    # <--- pass mask as attn_mask
-        is_causal=False,   # <--- ensure this is a bool
+        xa=xa,             # only if cross-attention is needed
+        mask=mask,         # pass the mask here
         kv_cache=kv_cache
     )[0]
+
 
     # --- Cross-Attention (if cross_attn is defined) ---
     if self.cross_attn:
