@@ -418,6 +418,9 @@ def load_trt_model(name: str, path: str | None = None, build: bool = True, verbo
     # 1) Add a debug log (or print) for the torch version:
     logger.debug(f"Using torch version: {torch.__version__}")
 
+    # Debug log for TensorRT version
+    logger.debug(f"Using TensorRT version: {tensorrt.__version__}")
+
     if name not in MODEL_BUILDERS:
         raise RuntimeError(f"Model '{name}' is not supported by WhisperTRT.")
     
