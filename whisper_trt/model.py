@@ -413,13 +413,18 @@ MODEL_BUILDERS = {
 }
 
 
+import logging
+import os
+from .cache import get_cache_dir, make_cache_dir
+
+logger = logging.getLogger(__name__)
+
 def load_trt_model(name: str, path: str | None = None, build: bool = True, verbose: bool = False):
-
-    # 1) Add a debug log (or print) for the torch version:
-    logger.debug(f"Using torch version: {torch.__version__}")
-
-    # Debug log for TensorRT version
-    logger.debug(f"Using TensorRT version: {tensorrt.__version__}")
+    # Add a debug log for the path used to load/build the model
+    if path:
+        logger.debug(f"Attempting to load TRT model '{name}' from path: {path}")
+    else:
+        logger.debug(f"Attempting to load TRT model '{name}' but no path was provided.")
 
     if name not in MODEL_BUILDERS:
         raise RuntimeError(f"Model '{name}' is not supported by WhisperTRT.")
@@ -427,13 +432,16 @@ def load_trt_model(name: str, path: str | None = None, build: bool = True, verbo
     if path is None:
         path = os.path.join(get_cache_dir(), MODEL_FILENAMES[name])
         make_cache_dir()
+        logger.debug(f"No path specified; using cache path: {path}")
 
     builder = MODEL_BUILDERS[name]
 
     if not os.path.exists(path):
         if not build:
-            raise RuntimeError(f"No model found at {path}.  Please call load_trt_model with build=True.")
+            raise RuntimeError(f"No model found at {path}. Please call load_trt_model with build=True.")
         else:
             builder.build(path, verbose=verbose)
+            logger.debug(f"Built new TRT model for '{name}' at path: {path}")
 
+    logger.debug(f"Loading TRT engine from path: {path}")
     return builder.load(path)
