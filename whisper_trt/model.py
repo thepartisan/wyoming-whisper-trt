@@ -423,10 +423,16 @@ def load_trt_model(name: str, path: str | None = None, build: bool = True, verbo
 
     if name not in MODEL_BUILDERS:
         raise RuntimeError(f"Model '{name}' is not supported by WhisperTRT.")
-    
+
     if path is None:
         path = os.path.join(get_cache_dir(), MODEL_FILENAMES[name])
         make_cache_dir()
+
+    # Add a debug log for the path used to load/build the model
+    if path:
+        logger.debug(f"Attempting to load TRT model '{name}' from path: {path}")
+    else:
+        logger.debug(f"Attempting to load TRT model '{name}' but no path was provided.")
 
     builder = MODEL_BUILDERS[name]
 
