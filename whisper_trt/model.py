@@ -467,15 +467,8 @@ class WhisperTRTBuilder:
 
     @classmethod
     def get_tokenizer(cls) -> Tokenizer:
-        """
-        Retrieve the tokenizer for the model.
-
-        Returns:
-            Tokenizer: The tokenizer instance.
-        """
         model = load_model(cls.model)
         tokenizer = whisper.tokenizer.get_tokenizer(
-            is_multilingual=model.is_multilingual,
             num_languages=model.num_languages,
             language="en",
             task="transcribe",
@@ -551,21 +544,14 @@ class EnBuilder(WhisperTRTBuilder):
 
     @classmethod
     def get_tokenizer(cls) -> Tokenizer:
-        """
-        Retrieve the English tokenizer.
-
-        Returns:
-            Tokenizer: The English tokenizer instance.
-        """
         tokenizer = whisper.tokenizer.get_tokenizer(
-            is_multilingual=False,
             num_languages=99,
             language="en",
             task="transcribe",
         )
         logger.debug("English tokenizer retrieved.")
         return tokenizer
-
+        
 
 class TinyEnBuilder(EnBuilder):
     """
