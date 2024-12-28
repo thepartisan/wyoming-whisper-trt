@@ -35,10 +35,8 @@ Memory consumption to transcribe 20 seconds of speech on Jetson Orin Nano. See [
 
 |     | whisper (Jetson) | faster_whisper (Jetson) | whisper_trt (Jetson) | whisper (4070 Ti) | faster_whisper (4070 Ti) | whisper_trt (4070 Ti) |
 |-------|---------|--------------------|--------|---------|--------------------|--------|
-| tiny.en | 569 MB | **404 MB** | 488 MB | 672 MB | **522 MB** | 4597 MB |
-| base.en | 666 MB |  Unavailable | **439 MB** | 726 MB | **514 MB** | 4775 MB |
-
-NOTE: The tests on the 4070 Ti returned the results as music instead of text, which likely affects the memory consumption.
+| tiny.en | 569 MB | **404 MB** | 488 MB | 672 MB | **522 MB** | 544 MB |
+| base.en | 666 MB |  Unavailable | **439 MB** | 726 MB | **514 MB** | 548 MB |
 
 ## Usage
 
