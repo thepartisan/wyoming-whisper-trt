@@ -35,8 +35,8 @@ class NanosecondFormatter(logging.Formatter):
     def formatTime(self, record: logging.LogRecord, datefmt: Optional[str] = None) -> str:
         """Formats the time with nanosecond precision."""
         ct = record.created
-        t = asyncio.get_event_loop().time() if asyncio.get_event_loop().is_running() else ct
-        s = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ct))
+        t = time.localtime(ct)
+        s = time.strftime("%Y-%m-%d %H:%M:%S", t)
         return f"{s}.{int(ct * 1e9) % 1_000_000_000:09d}"
 
 
@@ -48,7 +48,7 @@ def setup_logging(debug: bool, log_format: str) -> None:
         debug (bool): Whether to enable DEBUG level logging.
         log_format (str): Format string for log messages.
     """
-    formatter = NanosecondFormatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+    formatter = NanosecondFormatter(log_format)
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(formatter)
 
@@ -147,7 +147,7 @@ def build_wyoming_info(model_name: str, languages: List[str]) -> Info:
 
 async def run_server(
     uri: str,
-    handler_class: WhisperTrtEventHandler,
+    handler_factory_func,
     *args,
     **kwargs
 ) -> None:
@@ -156,7 +156,7 @@ async def run_server(
 
     Args:
         uri (str): The URI to bind the server to.
-        handler_class (WhisperTrtEventHandler): The event handler class.
+        handler_factory_func: The handler factory function.
         *args: Variable length argument list.
         **kwargs: Arbitrary keyword arguments.
     """
@@ -168,7 +168,7 @@ async def run_server(
         raise
 
     try:
-        await server.run(handler_class, *args, **kwargs)
+        await server.run(handler_factory_func, *args, **kwargs)
     except Exception as e:
         logger.error(f"Server encountered an error: {e}")
         raise
@@ -286,8 +286,8 @@ async def main() -> None:
     model_lock = asyncio.Lock()
     logger.debug("Initialized asyncio lock for model access.")
 
-    # Initialize the event handler
-    event_handler = partial(
+    # Initialize the event handler factory
+    handler_factory_func = partial(
         WhisperTrtEventHandler,
         wyoming_info=wyoming_info,
         cli_args=args,
@@ -299,7 +299,7 @@ async def main() -> None:
     # Run the server
     try:
         logger.info("Starting the Whisper TRT ASR server...")
-        await run_server(args.uri, event_handler)
+        await run_server(args.uri, handler_factory_func)
     except Exception as e:
         logger.error(f"Server encountered an unexpected error: {e}")
         sys.exit(1)
