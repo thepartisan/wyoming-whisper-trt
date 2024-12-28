@@ -4,7 +4,7 @@ This project optimizes [OpenAI Whisper](https://github.com/openai/whisper) with 
 
 When executing the ``base.en`` model on NVIDIA Jetson Orin Nano, WhisperTRT runs **~3x faster** while consuming only **~60%** the memory compared with PyTorch.
 
-By default, this uses the tiny.en model.
+By default, this uses the base.en model.
 
 WhisperTRT roughly mimics the API of the original Whisper model, making it easy to use. The Wyoming goodies are based off [wyoming-faster-whisper](https://github.com/rhasspy/wyoming-faster-whisper) with minimal tweaks to use WhisperTRT instead of faster-whisper.
 
