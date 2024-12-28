@@ -14,7 +14,7 @@ from wyoming.asr import Transcribe, Transcript
 from wyoming.audio import AudioChunk, AudioStop
 from wyoming.event import Event
 from wyoming.info import Describe, Info
-from wyoming.server import AsyncEventHandler
+from wyoming.server import AsyncEventHandler, WyomingServer
 
 import whisper_trt
 
@@ -244,6 +244,8 @@ def main():
     """Main entry point for the event handler."""
     parser = argparse.ArgumentParser(description="Whisper TRT Event Handler")
     parser.add_argument("--language", type=str, default="en", help="Language for transcription")
+    parser.add_argument("--host", type=str, default="0.0.0.0", help="Server host")
+    parser.add_argument("--port", type=int, default=8000, help="Server port")
     args = parser.parse_args()
 
     # Initialize Whisper TRT model and asyncio lock
@@ -253,8 +255,8 @@ def main():
     # Initialize Wyoming Info
     wyoming_info = Info()
 
-    # Create the event handler instance
-    event_handler = WhisperTrtEventHandler(
+    # Create the handler factory with the necessary arguments
+    handler_factory = create_handler_factory(
         wyoming_info=wyoming_info,
         cli_args=args,
         model=model,
@@ -262,14 +264,21 @@ def main():
         initial_prompt=None,  # Modify as needed
     )
 
-    # Run the event handler within an asyncio event loop
-    try:
-        asyncio.run(event_handler.run())
-    except KeyboardInterrupt:
-        _LOGGER.info("Shutting down event handler.")
-    finally:
-        event_handler.cleanup()
+    # Initialize the Wyoming server
+    server = WyomingServer(
+        host=args.host,
+        port=args.port,
+        handler_factory=handler_factory,
+    )
 
+    # Run the server within an asyncio event loop
+    try:
+        asyncio.run(server.run())
+    except KeyboardInterrupt:
+        _LOGGER.info("Shutting down server.")
+    finally:
+        # Perform any necessary cleanup here
+        pass
 
 if __name__ == "__main__":
     main()
