@@ -51,27 +51,30 @@ class WhisperTrtEventHandler(AsyncEventHandler):
 
     def __init__(
         self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+        *,
         wyoming_info: Info,
         cli_args: argparse.Namespace,
         model: whisper_trt.WhisperTRT,
         model_lock: asyncio.Lock,
         initial_prompt: Optional[str] = None,
-        *args,
         **kwargs,
     ) -> None:
         """
         Initializes the WhisperTrtEventHandler.
 
         Args:
+            reader (asyncio.StreamReader): The stream reader for client communication.
+            writer (asyncio.StreamWriter): The stream writer for client communication.
             wyoming_info (Info): Information about the Wyoming server.
             cli_args (argparse.Namespace): Command-line arguments.
             model (whisper_trt.WhisperTRT): The Whisper TRT model instance.
             model_lock (asyncio.Lock): Asynchronous lock for model access.
             initial_prompt (Optional[str], optional): Initial prompt for transcription. Defaults to None.
-            *args: Variable length argument list.
             **kwargs: Arbitrary keyword arguments.
         """
-        super().__init__(*args, **kwargs)
+        super().__init__(reader, writer, **kwargs)
 
         self.cli_args = cli_args
         self.wyoming_info_event = wyoming_info.event()
