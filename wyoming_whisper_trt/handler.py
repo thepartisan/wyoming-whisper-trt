@@ -6,13 +6,14 @@ import logging
 import tempfile
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
+import torch
 import wave
 from wyoming.asr import Transcribe, Transcript
 from wyoming.audio import AudioChunk, AudioStop
 from wyoming.event import Event
-from wyoming.info import Info
+from wyoming.info import Describe, Info
 from wyoming.server import AsyncEventHandler
 
 import whisper_trt
@@ -21,15 +22,17 @@ import whisper_trt
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
+
 class NanosecondFormatter(logging.Formatter):
     """Custom formatter to include nanoseconds in log timestamps."""
 
     def formatTime(self, record: logging.LogRecord, datefmt: Optional[str] = None) -> str:
         """Formats the time with nanosecond precision."""
-        ct = time.time()
+        ct = record.created
         t = time.localtime(ct)
         s = time.strftime("%Y-%m-%d %H:%M:%S", t)
         return f"{s}.{int(ct * 1e9) % 1_000_000_000:09d}"
+
 
 # Set up logging with the custom formatter
 formatter = NanosecondFormatter('%(asctime)s [%(levelname)s] %(message)s')
@@ -43,13 +46,14 @@ root_logger.handlers = [handler]
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class WhisperTrtEventHandler(AsyncEventHandler):
     """Event handler for clients utilizing the Whisper TRT model."""
 
     def __init__(
         self,
-        reader,
-        writer,
+        reader: asyncio.StreamReader,  # Added positional argument
+        writer: asyncio.StreamWriter,  # Added positional argument
         wyoming_info: Info,
         cli_args: argparse.Namespace,
         model: whisper_trt.WhisperTRT,
@@ -62,8 +66,8 @@ class WhisperTrtEventHandler(AsyncEventHandler):
         Initializes the WhisperTrtEventHandler.
 
         Args:
-            reader: The reader stream from the client connection.
-            writer: The writer stream to the client connection.
+            reader (asyncio.StreamReader): The reader stream from the client connection.
+            writer (asyncio.StreamWriter): The writer stream to the client connection.
             wyoming_info (Info): Information about the Wyoming server.
             cli_args (argparse.Namespace): Command-line arguments.
             model (whisper_trt.WhisperTRT): The Whisper TRT model instance.
@@ -72,7 +76,7 @@ class WhisperTrtEventHandler(AsyncEventHandler):
             *args: Variable length argument list.
             **kwargs: Arbitrary keyword arguments.
         """
-        super().__init__(reader, writer, *args, **kwargs)
+        super().__init__(reader, writer, *args, **kwargs)  # Initialize the base class
 
         self.cli_args = cli_args
         self.wyoming_info_event = wyoming_info.event()
@@ -202,59 +206,3 @@ class WhisperTrtEventHandler(AsyncEventHandler):
         if self._wav_dir:
             self._wav_dir.cleanup()
             _LOGGER.debug(f"Cleaned up temporary directory '{self._wav_dir.name}'.")
-
-def main():
-    """Main entry point for the event handler."""
-    parser = argparse.ArgumentParser(description="Whisper TRT Event Handler")
-    parser.add_argument("--language", type=str, default="en", help="Language for transcription")
-    args = parser.parse_args()
-
-    # Initialize Whisper TRT model and asyncio lock
-    model = whisper_trt.load_trt_model("small.en", build=True)
-    model_lock = asyncio.Lock()
-
-    # Initialize Wyoming Info
-    wyoming_info = Info()
-
-    # Define the handler_factory
-    def handler_factory(reader, writer):
-        return WhisperTrtEventHandler(
-            reader=reader,
-            writer=writer,
-            wyoming_info=wyoming_info,
-            cli_args=args,
-            model=model,
-            model_lock=model_lock,
-            initial_prompt=None,  # Modify as needed
-        )
-
-    # Define the coroutine that handles a single client connection
-    async def handle_client(reader, writer):
-        handler = handler_factory(reader, writer)
-        try:
-            await handler.run()
-        finally:
-            handler.cleanup()
-
-    # Get the server address and port from configuration or defaults
-    host = "0.0.0.0"  # Listen on all interfaces
-    port = 5678       # Replace with your desired port
-
-    # Run the server within an asyncio event loop
-    async def run_server():
-        server = await asyncio.start_server(handle_client, host, port)
-        addr = server.sockets[0].getsockname()
-        _LOGGER.info(f"Serving on {addr}")
-
-        async with server:
-            await server.serve_forever()
-
-    try:
-        asyncio.run(run_server())
-    except KeyboardInterrupt:
-        _LOGGER.info("Shutting down event handler.")
-    except Exception as e:
-        _LOGGER.error(f"Server encountered an error: {e}")
-
-if __name__ == "__main__":
-    main()
