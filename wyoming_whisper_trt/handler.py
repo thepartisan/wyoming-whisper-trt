@@ -52,8 +52,8 @@ class WhisperTrtEventHandler(AsyncEventHandler):
 
     def __init__(
         self,
-        reader: asyncio.StreamReader,  # Added positional argument
-        writer: asyncio.StreamWriter,  # Added positional argument
+        reader: asyncio.StreamReader,  # Positional argument
+        writer: asyncio.StreamWriter,  # Positional argument
         wyoming_info: Info,
         cli_args: argparse.Namespace,
         model: whisper_trt.WhisperTRT,
@@ -86,7 +86,7 @@ class WhisperTrtEventHandler(AsyncEventHandler):
         self._language = self.cli_args.language
         self._wav_dir = tempfile.TemporaryDirectory()
         self._wav_path = Path(self._wav_dir.name) / "speech.wav"
-        self._wav_file: Optional[wave.Wave_write] = None
+        self._wave_writer: Optional[wave.Wave_write] = None  # Renamed attribute
 
     async def handle_event(self, event: Event) -> bool:
         """
@@ -129,36 +129,39 @@ class WhisperTrtEventHandler(AsyncEventHandler):
         """
         chunk = AudioChunk.from_event(event)
 
-        if self._wav_file is None:
+        if self._wave_writer is None:
             try:
-                self._wav_file = wave.open(self._wav_path, "wb")
-                self._wav_file.setframerate(chunk.rate)
-                self._wav_file.setsampwidth(chunk.width)
-                self._wav_file.setnchannels(chunk.channels)
+                self._wave_writer = wave.open(str(self._wav_path), "wb")  # Ensure string path
+                self._wave_writer.setframerate(chunk.rate)
+                self._wave_writer.setsampwidth(chunk.width)
+                self._wave_writer.setnchannels(chunk.channels)
                 _LOGGER.debug(f"Initialized WAV file at '{self._wav_path}'.")
             except wave.Error as e:
                 _LOGGER.error(f"Failed to open WAV file: {e}")
                 raise
 
-        self._wav_file.writeframes(chunk.audio)
+        # Debug log to verify the type of self._wave_writer
+        _LOGGER.debug(f"Type of wave writer: {type(self._wave_writer)}")
+
+        self._wave_writer.writeframes(chunk.audio)
         _LOGGER.debug(f"Wrote {len(chunk.audio)} frames to WAV file.")
 
     async def _handle_audio_stop(self) -> None:
         """
         Handles an AudioStop event by transcribing the recorded audio.
         """
-        if self._wav_file is None:
+        if self._wave_writer is None:
             _LOGGER.warning("AudioStop received but no audio was recorded.")
             return
 
         try:
-            self._wav_file.close()
+            self._wave_writer.close()
             _LOGGER.debug(f"Closed WAV file at '{self._wav_path}'.")
         except wave.Error as e:
             _LOGGER.error(f"Failed to close WAV file: {e}")
             raise
         finally:
-            self._wav_file = None
+            self._wave_writer = None
 
         async with self.model_lock:
             try:
