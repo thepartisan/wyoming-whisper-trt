@@ -206,6 +206,39 @@ class WhisperTrtEventHandler(AsyncEventHandler):
             self._wav_dir.cleanup()
             _LOGGER.debug(f"Cleaned up temporary directory '{self._wav_dir.name}'.")
 
+def create_handler_factory(
+    wyoming_info: Info,
+    cli_args: argparse.Namespace,
+    model: whisper_trt.WhisperTRT,
+    model_lock: asyncio.Lock,
+    initial_prompt: Optional[str] = None,
+):
+    """
+    Creates a handler factory function with pre-specified arguments.
+
+    Args:
+        wyoming_info (Info): Information about the Wyoming server.
+        cli_args (argparse.Namespace): Command-line arguments.
+        model (whisper_trt.WhisperTRT): The Whisper TRT model instance.
+        model_lock (asyncio.Lock): Asynchronous lock for model access.
+        initial_prompt (Optional[str], optional): Initial prompt for transcription. Defaults to None.
+
+    Returns:
+        Callable: A factory function that accepts reader and writer.
+    """
+    def handler_factory(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> WhisperTrtEventHandler:
+        return WhisperTrtEventHandler(
+            reader,
+            writer,
+            wyoming_info=wyoming_info,
+            cli_args=cli_args,
+            model=model,
+            model_lock=model_lock,
+            initial_prompt=initial_prompt,
+        )
+    
+    return handler_factory
+
 
 def main():
     """Main entry point for the event handler."""
