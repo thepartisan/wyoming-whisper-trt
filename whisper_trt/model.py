@@ -469,10 +469,23 @@ def load_trt_model(name: str, path: str | None = None, build: bool = True, verbo
 
     builder = MODEL_BUILDERS[name]
 
-    if not os.path.exists(path):
-        if not build:
-            raise RuntimeError(f"No model found at {path}.  Please call load_trt_model with build=True.")
-        else:
-            builder.build(path, verbose=verbose)
+    current_trt_version = tensorrt.__version__
 
+    if path and os.path.exists(path):
+        checkpoint = torch.load(path)
+        built_trt_version = checkpoint.get("trt_version", "unknown")
+        logger.debug(f"Engine was built with TensorRT version: {built_trt_version}")
+
+        if built_trt_version != current_trt_version:
+            logger.warning("TensorRT version mismatch. Rebuilding the engine.")
+            os.remove(path)  # Remove old engine to trigger rebuild
+
+    if not os.path.exists(path):
+        builder.build(path, verbose=verbose)
+        checkpoint = torch.load(path)
+        checkpoint["trt_version"] = current_trt_version
+        torch.save(checkpoint, path)
+        logger.debug(f"Built new TRT model for '{name}' at path: {path} with TRT version: {current_trt_version}")
+
+    logger.debug(f"Loading TRT engine from path: {path}")
     return builder.load(path)
