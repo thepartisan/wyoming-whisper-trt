@@ -249,7 +249,7 @@ def main():
     args = parser.parse_args()
 
     # Initialize Whisper TRT model and asyncio lock
-    model = whisper_trt.load_trt_model("small.en", build=True)
+    model = whisper_trt.load_trt_model("tiny.en", build=True)
     model_lock = asyncio.Lock()
 
     # Initialize Wyoming Info
