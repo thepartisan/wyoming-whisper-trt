@@ -13,7 +13,7 @@ from wyoming.asr import Transcribe, Transcript
 from wyoming.audio import AudioChunk, AudioStop
 from wyoming.event import Event
 from wyoming.info import Info
-from wyoming.server import Server, AsyncEventHandler  # Correct imports
+from wyoming.server import AsyncEventHandler
 
 import whisper_trt
 
@@ -228,16 +228,33 @@ def main():
             initial_prompt=None,  # Modify as needed
         )
 
-    # Initialize the Wyoming server with the custom handler_factory
-    server = Server(handler_factory=handler_factory)  # Correct import used
+    # Define the coroutine that handles a single client connection
+    async def handle_client(reader, writer):
+        handler = handler_factory(reader, writer)
+        try:
+            await handler.run()
+        finally:
+            handler.cleanup()
+
+    # Get the server address and port from configuration or defaults
+    host = "0.0.0.0"  # Listen on all interfaces
+    port = 5678       # Replace with your desired port
 
     # Run the server within an asyncio event loop
+    async def run_server():
+        server = await asyncio.start_server(handle_client, host, port)
+        addr = server.sockets[0].getsockname()
+        _LOGGER.info(f"Serving on {addr}")
+
+        async with server:
+            await server.serve_forever()
+
     try:
-        asyncio.run(server.run())  # Assuming 'run' is the method to start the server
+        asyncio.run(run_server())
     except KeyboardInterrupt:
         _LOGGER.info("Shutting down event handler.")
-    finally:
-        server.shutdown()  # Ensure graceful shutdown
+    except Exception as e:
+        _LOGGER.error(f"Server encountered an error: {e}")
 
 if __name__ == "__main__":
     main()
