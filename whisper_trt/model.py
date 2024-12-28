@@ -469,6 +469,7 @@ class WhisperTRTBuilder:
     def get_tokenizer(cls) -> Tokenizer:
         model = load_model(cls.model)
         tokenizer = whisper.tokenizer.get_tokenizer(
+            model.is_multilingual,  # Multilingual as positional argument
             num_languages=model.num_languages,
             language="en",
             task="transcribe",
@@ -545,6 +546,7 @@ class EnBuilder(WhisperTRTBuilder):
     @classmethod
     def get_tokenizer(cls) -> Tokenizer:
         tokenizer = whisper.tokenizer.get_tokenizer(
+            False,  # Multilingual set to False as positional argument
             num_languages=99,
             language="en",
             task="transcribe",
