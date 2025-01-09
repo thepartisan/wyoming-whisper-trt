@@ -40,6 +40,10 @@ Memory consumption to transcribe 20 seconds of speech on Jetson Orin Nano. See [
 
 ## Usage
 
+### Pre-requisites:
+1. Install and configure Docker
+2. Install and configure the [Nvidia Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+
 ### Docker Compose (recommended)
 ```
 services:
