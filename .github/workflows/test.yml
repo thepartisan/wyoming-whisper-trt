@@ -36,6 +36,11 @@ jobs:
         with:
           python-version: '3.12'  # Use a stable version
 
+      - name: Install Python venv
+        shell: bash
+        run: |
+          pip install virtualenv
+
       # 5. Install CUDA Toolkit
       - name: Install CUDA Toolkit
         uses: Jimver/cuda-toolkit@v0.2.19
