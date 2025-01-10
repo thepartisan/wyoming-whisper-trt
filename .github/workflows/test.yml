@@ -57,7 +57,7 @@ jobs:
         shell: bash
         run: |
           # Activate the virtual environment
-          source venv/bin/activate
+          source .venv/bin/activate
 
           # Define server URI for testing
           TEST_URI="tcp://127.0.0.1:8080"
