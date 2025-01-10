@@ -45,6 +45,7 @@ jobs:
       - name: Install Nvidia Drivers
         shell: bash
         run: |
+          sudo add-apt-repository ppa:graphics-drivers/ppa
           sudo apt-get install -y nvidia-open
       
       - name: Install CUDA Toolkit
