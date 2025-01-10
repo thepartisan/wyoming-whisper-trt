@@ -5,4 +5,10 @@
   ]
   "assignees": ["JonahMMay"],
   "labels": ["renovate"],
+  "packageRules": [
+  {
+    "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+    "automerge": true
+  }
+ ]
 }
