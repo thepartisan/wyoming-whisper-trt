@@ -10,3 +10,4 @@ jobs:
       - uses: psf/black@24.10.0
         with:
           options: "--check --verbose"
+          version: "~= 24.0"
