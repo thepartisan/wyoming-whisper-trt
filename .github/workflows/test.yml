@@ -6,25 +6,25 @@ on:
 
 jobs:
   test_linux:
-    name: "test on linux"
+    name: "Build and Test on Linux (self-hosted runner)"
     runs-on: self-hosted
     steps:
-      - name: Set up GCC
-        uses: egor-tensin/setup-gcc@v1.3
+      - name: Setup GCC
+        uses: Dup4/actions-setup-gcc@v1
         with:
           version: latest
-          platform: x64
-      - name: cuda-toolkit
+      - name: Install CUDA Toolkit
         uses: Jimver/cuda-toolkit@v0.2.19
       - name: Setup Python
         uses: actions/setup-python@v5.3.0    
-      - uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v3
         with:
           submodules: recursive
-      - name: setup
+      - name: Setup venv
         run: |
           script/setup --dev
-      - name: test
+      - name: Test Code
         run: |
           test $(script/run --version) = $(cat wyoming_faster_whisper/VERSION)
           script/lint
