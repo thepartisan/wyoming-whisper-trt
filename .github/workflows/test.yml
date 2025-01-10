@@ -76,7 +76,7 @@ jobs:
             --uri $TEST_URI \
             --data-dir $DATA_DIR \
             --download-dir $DOWNLOAD_DIR \
-            --device cpu \
+            --device gpu \
             --compute-type float16 \
             --beam-size 5 \
             --language en \
