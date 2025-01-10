@@ -9,10 +9,14 @@ jobs:
     name: "Build and Test on Linux (self-hosted runner)"
     runs-on: self-hosted
     steps:
-      - name: Setup GCC
-        uses: Dup4/actions-setup-gcc@v1
-        with:
-          version: latest
+      - name: Install GCC For Ubuntu
+        shell: bash
+        if: runner.os == 'ubuntu'
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            gcc \
+            g++
       - name: Install CUDA Toolkit
         uses: Jimver/cuda-toolkit@v0.2.19
       - name: Setup Python
