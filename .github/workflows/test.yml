@@ -49,7 +49,7 @@ jobs:
       - name: Setup Virtual Environment
         shell: bash
         run: |
-          chmod +x /script/setup
+          chmod +x script/setup
           ./script/setup
 
       # 7. Start server and test listening
