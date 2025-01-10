@@ -9,6 +9,8 @@ jobs:
     name: "test on linux"
     runs-on: ubuntu-latest
     steps:
+      - name: cuda-toolkit
+        uses: Jimver/cuda-toolkit@v0.2.19    
       - uses: actions/checkout@v3
         with:
           submodules: recursive
