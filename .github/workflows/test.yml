@@ -36,7 +36,11 @@ jobs:
         with:
           python-version: '3.12'  # Use a stable version
 
-      # 5. Create and activate virtual environment
+      # 5. Install CUDA Toolkit
+      - name: Install CUDA Toolkit
+        uses: Jimver/cuda-toolkit@v0.2.19
+
+      # 6. Create and activate virtual environment
       - name: Setup Virtual Environment
         shell: bash
         run: |
@@ -44,11 +48,6 @@ jobs:
           source venv/bin/activate
           pip install --upgrade pip
           pip install -r requirements.txt  # Ensure this file exists
-
-      # 6. Install CUDA Toolkit (Optional)
-      # Uncomment if CUDA is required
-      # - name: Install CUDA Toolkit
-      #   uses: Jimver/cuda-toolkit@v0.2.19
 
       # 7. Start server and test listening
       - name: Start server and test listening
