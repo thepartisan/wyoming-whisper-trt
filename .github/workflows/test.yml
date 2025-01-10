@@ -28,7 +28,7 @@ jobs:
       - name: Install Netcat
         shell: bash
         run: |
-          sudo apt install -y netcat
+          sudo apt-get install -y netcat-openbsd
 
       # 4. Setup Python environment
       - name: Setup Python
