@@ -1,40 +1,124 @@
-name: test
+name: Test Whisper TRT ASR Server
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [ main ]
   pull_request:
+    branches: [ main ]
 
 jobs:
   test_linux:
     name: "Build and Test on Linux (self-hosted runner)"
     runs-on: self-hosted
     steps:
-      - name: Install GCC
-        shell: bash
-        run: |
-          sudo apt update
-          sudo apt install -y \
-            gcc \
-            g++
-      - name: Install CUDA Toolkit
-        uses: Jimver/cuda-toolkit@v0.2.19
-      - name: Setup Python
-        uses: actions/setup-python@v5.3.0
-        with:
-          python-version: '3.12'
-      - name: Install Python venv
-        shell: bash
-        run: |
-          pip install virtualenv
+      # 1. Checkout the repository code
       - name: Checkout Code
         uses: actions/checkout@v3
         with:
           submodules: recursive
-      - name: Setup venv
+
+      # 2. Install GCC and G++
+      - name: Install GCC and G++
+        shell: bash
         run: |
-          script/setup --dev
-      - name: Test Code
+          sudo apt update
+          sudo apt install -y gcc g++
+
+      # 3. Install Netcat (nc) for listening checks
+      - name: Install Netcat
+        shell: bash
         run: |
-          test $(script/run --version) = $(cat wyoming_faster_whisper/VERSION)
-          script/lint
-          script/test
+          sudo apt install -y netcat
+
+      # 4. Setup Python environment
+      - name: Setup Python
+        uses: actions/setup-python@v5.3.0
+        with:
+          python-version: '3.12'  # Use a stable version
+
+      # 5. Create and activate virtual environment
+      - name: Setup Virtual Environment
+        shell: bash
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt  # Ensure this file exists
+
+      # 6. Install CUDA Toolkit (Optional)
+      # Uncomment if CUDA is required
+      # - name: Install CUDA Toolkit
+      #   uses: Jimver/cuda-toolkit@v0.2.19
+
+      # 7. Start server and test listening
+      - name: Start server and test listening
+        shell: bash
+        run: |
+          # Activate the virtual environment
+          source venv/bin/activate
+
+          # Define server URI for testing
+          TEST_URI="tcp://127.0.0.1:8080"
+
+          # Define data and download directories
+          DATA_DIR="./data"
+          DOWNLOAD_DIR="./download"
+
+          # Create necessary directories
+          mkdir -p $DATA_DIR
+          mkdir -p $DOWNLOAD_DIR
+
+          # Start the server in the background, redirecting output to server.log
+          nohup python -m wyoming_whisper_trt.__main__ \
+            --model small.en \
+            --uri $TEST_URI \
+            --data-dir $DATA_DIR \
+            --download-dir $DOWNLOAD_DIR \
+            --device cpu \
+            --compute-type float16 \
+            --beam-size 5 \
+            --language en \
+            > server.log 2>&1 &
+        
+          # Capture the server's Process ID (PID)
+          SERVER_PID=$!
+          echo "Started Whisper TRT server with PID $SERVER_PID"
+
+          # Function to check if the server is listening on port 8080
+          function is_server_listening() {
+            nc -z localhost 8080
+          }
+
+          # Initialize timeout parameters
+          TIMEOUT=30      # Maximum time to wait for the server to start (in seconds)
+          INTERVAL=2      # Interval between each check (in seconds)
+          ELAPSED=0
+
+          # Loop to check if the server is listening
+          while ! is_server_listening; do
+            if [ $ELAPSED -ge $TIMEOUT ]; then
+              echo "Server failed to start within $TIMEOUT seconds."
+              kill $SERVER_PID
+              exit 1  # Exit with failure
+            fi
+            echo "Waiting for server to start... ($ELAPSED/$TIMEOUT seconds elapsed)"
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+
+          echo "Server is successfully listening on port 8080."
+
+          # Terminate the server gracefully
+          kill $SERVER_PID
+          wait $SERVER_PID 2>/dev/null
+
+          # Exit the step with success
+          exit 0
+
+      # 8. Upload server logs if the test fails
+      - name: Upload server logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4.6.0
+        with:
+          name: server-logs
+          path: server.log
