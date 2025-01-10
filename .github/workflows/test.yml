@@ -42,6 +42,11 @@ jobs:
           pip install virtualenv
 
       # 5. Install CUDA Toolkit
+      - name: Install Nvidia Drivers
+        shell: bash
+        run: |
+          sudo apt-get install -y nvidia-open
+      
       - name: Install CUDA Toolkit
         uses: Jimver/cuda-toolkit@v0.2.19
 
