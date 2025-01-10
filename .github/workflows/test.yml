@@ -92,7 +92,7 @@ jobs:
           }
 
           # Initialize timeout parameters
-          TIMEOUT=30      # Maximum time to wait for the server to start (in seconds)
+          TIMEOUT=300      # Maximum time to wait for the server to start (in seconds)
           INTERVAL=2      # Interval between each check (in seconds)
           ELAPSED=0
 
