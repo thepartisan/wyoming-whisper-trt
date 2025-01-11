@@ -84,7 +84,7 @@ jobs:
             --uri $TEST_URI \
             --data-dir $DATA_DIR \
             --download-dir $DOWNLOAD_DIR \
-            --device gpu \
+            --device cuda \
             --compute-type float16 \
             --beam-size 5 \
             --language en \
