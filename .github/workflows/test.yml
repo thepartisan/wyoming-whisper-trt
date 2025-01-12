@@ -120,7 +120,7 @@ jobs:
 
           # Terminate the server gracefully
           kill $SERVER_PID
-          wait $SERVER_PID 2>/dev/null
+          wait $SERVER_PID 2>/dev/null || true
 
           # Exit the step with success
           exit 0
