@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA 
+# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA
 # CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: MIT
 #
@@ -11,16 +11,19 @@
 #
 # [License text continues...]
 
+
 from pathlib import Path
 from typing import Optional
 
 import logging
 
 # Configure logger
+
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 # Initialize cache directory
+
 _CACHE_DIR = Path.home() / ".cache" / "whisper_trt"
 
 
@@ -70,7 +73,6 @@ def set_cache_dir(path: str) -> None:
         error_msg = "The 'path' parameter must be a string."
         logger.error(error_msg)
         raise TypeError(error_msg)
-
     new_cache_dir = Path(path).expanduser().resolve()
     logger.debug(f"Attempting to set new cache directory to: {new_cache_dir}")
 
@@ -82,7 +84,8 @@ def set_cache_dir(path: str) -> None:
             logger.debug(f"New cache directory already exists at: {new_cache_dir}")
     except Exception as e:
         logger.error(f"Failed to create new cache directory at {new_cache_dir}: {e}")
-        raise RuntimeError(f"Could not create new cache directory at {new_cache_dir}") from e
-
+        raise RuntimeError(
+            f"Could not create new cache directory at {new_cache_dir}"
+        ) from e
     _CACHE_DIR = new_cache_dir
     logger.info(f"Cache directory successfully set to: {_CACHE_DIR}")
