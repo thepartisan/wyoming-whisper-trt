@@ -22,7 +22,4 @@
 
 from .__version__ import __version__
 from .model import WhisperTRT, load_trt_model
-from .cache import (
-    get_cache_dir,
-    set_cache_dir
-)
+from .cache import get_cache_dir, set_cache_dir
