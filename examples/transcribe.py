@@ -31,7 +31,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("model", type=str, choices=["tiny.en", "base.en", "small.en"])
     parser.add_argument("audio", type=str)
-    parser.add_argument("--backend", type=str, choices=["whisper", "whisper_trt", "faster_whisper"], default="whisper_trt")
+    parser.add_argument(
+        "--backend",
+        type=str,
+        choices=["whisper", "whisper_trt", "faster_whisper"],
+        default="whisper_trt",
+    )
     args = parser.parse_args()
 
     if args.backend == "whisper":
@@ -41,7 +46,6 @@ if __name__ == "__main__":
         model = load_model(args.model)
 
         result = model.transcribe(args.audio)
-        
     elif args.backend == "whisper_trt":
 
         from whisper_trt import load_trt_model
@@ -49,7 +53,6 @@ if __name__ == "__main__":
         model = load_trt_model(args.model)
 
         result = model.transcribe(args.audio)
-
     elif args.backend == "faster_whisper":
 
         from faster_whisper import WhisperModel
@@ -60,8 +63,6 @@ if __name__ == "__main__":
 
         text = "".join(seg.text for seg in segs)
         result = {"text": text}
-
     else:
         raise RuntimeError("Unsupported backend.")
-    
     print(f"Result: {result['text']}")
