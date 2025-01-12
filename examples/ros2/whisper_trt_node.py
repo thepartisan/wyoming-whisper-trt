@@ -29,13 +29,14 @@ from whisper_trt_pipeline import WhisperTRTPipeline
 
 class WhisperTRTNode(Node):
     def __init__(self):
-        super().__init__('WhisperTRTNode')
+        super().__init__("WhisperTRTNode")
 
         self.declare_parameter("model", "small.en")
-        self.declare_parameter("backend", "whisper_trt") 
+        self.declare_parameter("backend", "whisper_trt")
 
         # TODO: remove placeholder default
-        self.declare_parameter("cache_dir", "data")#rclpy.Parameter.Type.STRING)
+
+        self.declare_parameter("cache_dir", "data")  # rclpy.Parameter.Type.STRING)
         self.declare_parameter("vad_window", 5)
 
         self.declare_parameter("mic_device_index", rclpy.Parameter.Type.INTEGER)
@@ -47,9 +48,7 @@ class WhisperTRTNode(Node):
         self.declare_parameter("speech_topic", "/speech")
 
         self.speech_publisher = self.create_publisher(
-            String, 
-            self.get_parameter("speech_topic").value, 
-            10
+            String, self.get_parameter("speech_topic").value, 10
         )
 
         logger = self.get_logger()
@@ -78,7 +77,7 @@ class WhisperTRTNode(Node):
             mic_sample_rate=self.get_parameter("mic_sample_rate").value,
             mic_channel_for_asr=self.get_parameter("mic_channel_for_asr").value,
             mic_num_channels=self.get_parameter("mic_channels").value,
-            mic_bitwidth=self.get_parameter("mic_bitwidth").value
+            mic_bitwidth=self.get_parameter("mic_bitwidth").value,
         )
 
     def start_asr_pipeline(self):
@@ -96,5 +95,5 @@ def main(args=None):
     rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
