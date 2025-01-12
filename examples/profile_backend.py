@@ -35,7 +35,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("model", type=str, choices=["tiny.en", "base.en", "small.en"])
     parser.add_argument("audio", type=str)
-    parser.add_argument("--backend", type=str, choices=["whisper", "whisper_trt", "faster_whisper"], default="whisper_trt")
+    parser.add_argument(
+        "--backend",
+        type=str,
+        choices=["whisper", "whisper_trt", "faster_whisper"],
+        default="whisper_trt",
+    )
     args = parser.parse_args()
 
     def process_memory():
@@ -44,19 +49,17 @@ if __name__ == "__main__":
         return mem_info.rss
 
     def profile_model(model, audio, iters: int = 1, is_faster_whisper: bool = False):
-        
+
         result = model.transcribe(audio)
 
         if is_faster_whisper:
             result = {"text": "".join(seg.text for seg in result[0])}
-
         torch.cuda.current_stream().synchronize()
         t0 = time.perf_counter_ns()
         for i in range(iters):
             result = model.transcribe(audio)
             if is_faster_whisper:
                 result = {"text": "".join(seg.text for seg in result[0])}
-
         torch.cuda.current_stream().synchronize()
         t1 = time.perf_counter_ns()
 
@@ -66,23 +69,22 @@ if __name__ == "__main__":
         start_mem = process_memory()
         if backend == "whisper":
             from whisper import load_model
+
             result, latency = profile_model(load_model(model), audio)
         elif backend == "whisper_trt":
             result, latency = profile_model(load_trt_model(model), audio)
         elif backend == "faster_whisper":
             from faster_whisper import WhisperModel
-            result, latency = profile_model(WhisperModel(model), audio, is_faster_whisper=True)
+
+            result, latency = profile_model(
+                WhisperModel(model), audio, is_faster_whisper=True
+            )
         else:
             raise RuntimeError("unsupported backend")
-
         end_mem = process_memory()
         print(f"Backend: {backend}")
         print(f"\tResult: {result['text']}")
         print(f"\tLatency: {latency} Seconds")
         print(f"\tMemory: {(end_mem - start_mem) >> 20} MB")
-    
-    run(
-        args.model,
-        args.backend,
-        args.audio
-    )
+
+    run(args.model, args.backend, args.audio)

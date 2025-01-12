@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 """
 Main entry point for the Whisper TRT server.
 
@@ -25,6 +26,7 @@ from whisper_trt.utils import check_file_md5, download_file
 from whisper_trt import load_trt_model, WhisperTRT
 
 # Configure module-specific logger
+
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
@@ -32,7 +34,9 @@ logger.addHandler(logging.NullHandler())
 class NanosecondFormatter(logging.Formatter):
     """Custom formatter to include nanoseconds in log timestamps."""
 
-    def formatTime(self, record: logging.LogRecord, datefmt: Optional[str] = None) -> str:
+    def formatTime(
+        self, record: logging.LogRecord, datefmt: Optional[str] = None
+    ) -> str:
         """Formats the time with nanosecond precision."""
         ct = record.created
         t = time.localtime(ct)
@@ -74,7 +78,7 @@ def normalize_model_name(model_name: str) -> str:
         "base": "base.en",
         "small": "small.en",
         "medium": "medium.en",
-        "large": "large.en"
+        "large": "large.en",
     }
     normalized_name = mapping.get(model_name.lower(), model_name)
     logger.debug(f"Normalized model name: '{model_name}' to '{normalized_name}'.")
@@ -92,14 +96,20 @@ def extract_languages(tokenizer: WhisperTRT) -> List[str]:
         List[str]: A list of supported language codes.
     """
     try:
-        languages = tokenizer.tokenizer.get_languages()  # Replace with the correct method if different
+        languages = (
+            tokenizer.tokenizer.get_languages()
+        )  # Replace with the correct method if different
         logger.debug(f"Supported languages retrieved: {languages}")
     except AttributeError:
-        logger.warning("Tokenizer does not have 'get_languages' method. Defaulting to ['en'].")
-        languages = ['en']
+        logger.warning(
+            "Tokenizer does not have 'get_languages' method. Defaulting to ['en']."
+        )
+        languages = ["en"]
     except Exception as e:
-        logger.error(f"Error retrieving languages from tokenizer: {e}. Defaulting to ['en'].")
-        languages = ['en']
+        logger.error(
+            f"Error retrieving languages from tokenizer: {e}. Defaulting to ['en']."
+        )
+        languages = ["en"]
     return languages
 
 
@@ -141,16 +151,13 @@ def build_wyoming_info(model_name: str, languages: List[str]) -> Info:
             )
         ],
     )
-    logger.debug(f"Wyoming Info built with model '{model_name}' and languages {languages}.")
+    logger.debug(
+        f"Wyoming Info built with model '{model_name}' and languages {languages}."
+    )
     return wyoming_info
 
 
-async def run_server(
-    uri: str,
-    handler_factory_func,
-    *args,
-    **kwargs
-) -> None:
+async def run_server(uri: str, handler_factory_func, *args, **kwargs) -> None:
     """
     Initializes and runs the asynchronous server.
 
@@ -166,7 +173,6 @@ async def run_server(
     except Exception as e:
         logger.error(f"Failed to initialize server with URI '{uri}': {e}")
         raise
-
     try:
         await server.run(handler_factory_func, *args, **kwargs)
     except Exception as e:
@@ -248,17 +254,22 @@ async def main() -> None:
     args = parser.parse_args()
 
     # Set download directory to the first data directory if not specified
+
     if not args.download_dir:
         args.download_dir = args.data_dir[0]
-        logger.debug(f"No download directory specified. Using first data directory: {args.download_dir}")
-
+        logger.debug(
+            f"No download directory specified. Using first data directory: {args.download_dir}"
+        )
     # Setup logging
+
     setup_logging(args.debug, args.log_format)
 
     # Normalize model name
+
     model_name = normalize_model_name(args.model)
 
     # Ensure the download directory exists
+
     download_path = Path(args.download_dir)
     try:
         download_path.mkdir(parents=True, exist_ok=True)
@@ -266,27 +277,32 @@ async def main() -> None:
     except OSError as e:
         logger.error(f"Failed to create download directory at '{download_path}': {e}")
         sys.exit(1)
-
     # Load Whisper TRT model
+
     try:
         logger.info(f"Loading Whisper TRT model '{model_name}'...")
-        whisper_model = load_trt_model(model_name, path=str(download_path / f"{model_name}.pth"), build=True)
+        whisper_model = load_trt_model(
+            model_name, path=str(download_path / f"{model_name}.pth"), build=True
+        )
         logger.info(f"Whisper TRT model '{model_name}' loaded successfully.")
     except Exception as e:
         logger.error(f"Failed to load Whisper TRT model '{model_name}': {e}")
         sys.exit(1)
-
     # Extract supported languages from the tokenizer
+
     languages = extract_languages(whisper_model)
 
     # Build Wyoming Info
+
     wyoming_info = build_wyoming_info(model_name, languages)
 
     # Initialize asyncio lock for model access
+
     model_lock = asyncio.Lock()
     logger.debug("Initialized asyncio lock for model access.")
 
     # Initialize the event handler factory
+
     handler_factory_func = partial(
         WhisperTrtEventHandler,
         wyoming_info=wyoming_info,
@@ -297,6 +313,7 @@ async def main() -> None:
     )
 
     # Run the server
+
     try:
         logger.info("Starting the Whisper TRT ASR server...")
         await run_server(args.uri, handler_factory_func)

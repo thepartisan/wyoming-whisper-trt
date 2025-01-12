@@ -42,28 +42,25 @@ def find_respeaker_audio_device_index():
     for i in range(num_devices):
 
         device_info = p.get_device_info_by_host_api_device_index(0, i)
-        
+
         if "respeaker" in device_info.get("name").lower():
 
             device_index = i
-
     return device_index
 
 
 @contextmanager
 def get_respeaker_audio_stream(
-        device_index: Optional[int] = None,
-        sample_rate: int = 16000,
-        channels: int = 6,
-        bitwidth: int = 2
-    ):
+    device_index: Optional[int] = None,
+    sample_rate: int = 16000,
+    channels: int = 6,
+    bitwidth: int = 2,
+):
 
     if device_index is None:
         device_index = find_respeaker_audio_device_index()
-
     if device_index is None:
         raise RuntimeError("Could not find Respeaker device.")
-    
     p = pyaudio.PyAudio()
 
     stream = p.open(
@@ -71,7 +68,7 @@ def get_respeaker_audio_stream(
         format=p.get_format_from_width(bitwidth),
         channels=channels,
         input=True,
-        input_device_index=device_index
+        input_device_index=device_index,
     )
 
     try:
@@ -86,8 +83,9 @@ def audio_numpy_from_bytes(audio_bytes: bytes):
     return audio
 
 
-def audio_numpy_slice_channel(audio_numpy: np.ndarray, channel_index: int, 
-                      num_channels: int = 6):
+def audio_numpy_slice_channel(
+    audio_numpy: np.ndarray, channel_index: int, num_channels: int = 6
+):
     return audio_numpy[channel_index::num_channels]
 
 
@@ -110,13 +108,15 @@ class AudioSegment:
 
 class Microphone(Process):
 
-    def __init__(self, 
-                 output_queue: Queue, 
-                 chunk_size: int = 1536, 
-                 device_index: int | None = None,
-                 use_channel: int = 0, 
-                 num_channels: int = 6,
-                 sample_rate: int = 16000):
+    def __init__(
+        self,
+        output_queue: Queue,
+        chunk_size: int = 1536,
+        device_index: int | None = None,
+        use_channel: int = 0,
+        num_channels: int = 6,
+        sample_rate: int = 16000,
+    ):
         super().__init__()
         self.output_queue = output_queue
         self.chunk_size = chunk_size
@@ -126,19 +126,26 @@ class Microphone(Process):
         self.sample_rate = sample_rate
 
     def run(self):
-        with get_respeaker_audio_stream(sample_rate=self.sample_rate, 
-                                        device_index=self.device_index, 
-                                        channels=self.num_channels) as stream:
+        with get_respeaker_audio_stream(
+            sample_rate=self.sample_rate,
+            device_index=self.device_index,
+            channels=self.num_channels,
+        ) as stream:
             while True:
                 audio_raw = stream.read(self.chunk_size)
                 audio_numpy = audio_numpy_from_bytes(audio_raw)
-                audio_numpy = np.stack([audio_numpy_slice_channel(audio_numpy, i, self.num_channels) for i in range(self.num_channels)])
+                audio_numpy = np.stack(
+                    [
+                        audio_numpy_slice_channel(audio_numpy, i, self.num_channels)
+                        for i in range(self.num_channels)
+                    ]
+                )
                 audio_numpy_normalized = audio_numpy_normalize(audio_numpy)
 
                 audio = AudioChunk(
                     audio_raw=audio_raw,
                     audio_numpy=audio_numpy,
-                    audio_numpy_normalized=audio_numpy_normalized
+                    audio_numpy_normalized=audio_numpy_normalized,
                 )
 
                 self.output_queue.put(audio)
@@ -146,16 +153,18 @@ class Microphone(Process):
 
 class VAD(Process):
 
-    def __init__(self,
-            input_queue: Queue, 
-            output_queue: Queue,
-            sample_rate: int = 16000,
-            use_channel: int = 0,
-            speech_threshold: float = 0.5,
-            max_filter_window: int = 1,
-            ready_flag = None,
-            speech_start_flag = None,
-            speech_end_flag = None):
+    def __init__(
+        self,
+        input_queue: Queue,
+        output_queue: Queue,
+        sample_rate: int = 16000,
+        use_channel: int = 0,
+        speech_threshold: float = 0.5,
+        max_filter_window: int = 1,
+        ready_flag=None,
+        speech_start_flag=None,
+        speech_end_flag=None,
+    ):
         super().__init__()
         self.input_queue = input_queue
         self.output_queue = output_queue
@@ -170,10 +179,10 @@ class VAD(Process):
     def run(self):
 
         vad = load_vad()
-        
+
         # warmup run
+
         vad(np.zeros(1536, dtype=np.float32), sr=self.sample_rate)
-        
 
         max_filter_window = deque(maxlen=self.max_filter_window)
 
@@ -183,48 +192,61 @@ class VAD(Process):
 
         if self.ready_flag is not None:
             self.ready_flag.set()
-
         while True:
-            
 
             audio_chunk = self.input_queue.get()
 
-            voice_prob = float(vad(audio_chunk.audio_numpy_normalized[self.use_channel], sr=self.sample_rate).flatten()[0])
+            voice_prob = float(
+                vad(
+                    audio_chunk.audio_numpy_normalized[self.use_channel],
+                    sr=self.sample_rate,
+                ).flatten()[0]
+            )
 
             chunk = AudioChunk(
                 audio_raw=audio_chunk.audio_raw,
                 audio_numpy=audio_chunk.audio_numpy,
                 audio_numpy_normalized=audio_chunk.audio_numpy_normalized,
-                voice_prob=voice_prob
+                voice_prob=voice_prob,
             )
 
             max_filter_window.append(chunk)
 
-            is_voice = any(c.voice_prob > self.speech_threshold for c in max_filter_window)
-            
+            is_voice = any(
+                c.voice_prob > self.speech_threshold for c in max_filter_window
+            )
+
             if is_voice > prev_is_voice:
                 speech_chunks = [chunk for chunk in max_filter_window]
                 # start voice
+
                 speech_chunks.append(chunk)
                 if self.speech_start_flag is not None:
                     self.speech_start_flag.set()
             elif is_voice < prev_is_voice:
                 # end voice
+
                 segment = AudioSegment(chunks=speech_chunks)
                 self.output_queue.put(segment)
                 if self.speech_end_flag is not None:
                     self.speech_end_flag.set()
             elif is_voice:
                 # continue voice
+
                 speech_chunks.append(chunk)
-
             prev_is_voice = is_voice
-
 
 
 class ASR(Process):
 
-    def __init__(self, model: str, backend: str, input_queue, use_channel: int = 0, ready_flag = None):
+    def __init__(
+        self,
+        model: str,
+        backend: str,
+        input_queue,
+        use_channel: int = 0,
+        ready_flag=None,
+    ):
         super().__init__()
         self.model = model
         self.input_queue = input_queue
@@ -233,39 +255,47 @@ class ASR(Process):
         self.backend = backend
 
     def run(self):
-        
+
         if self.backend == "whisper_trt":
             from whisper_trt import load_trt_model
+
             model = load_trt_model(self.model)
         elif self.backend == "whisper":
             from whisper import load_model
+
             model = load_model(self.model)
         elif self.backend == "faster_whisper":
             from faster_whisper import WhisperModel
+
             class FasterWhisperWrapper:
                 def __init__(self, model):
                     self.model = model
+
                 def transcribe(self, audio):
                     segs, info = self.model.transcribe(audio)
                     text = "".join([seg.text for seg in segs])
                     return {"text": text}
-                
-            model = FasterWhisperWrapper(WhisperModel(self.model))
 
+            model = FasterWhisperWrapper(WhisperModel(self.model))
         # warmup
+
         model.transcribe(np.zeros(1536, dtype=np.float32))
 
         if self.ready_flag is not None:
             self.ready_flag.set()
-
         while True:
 
             speech_segment = self.input_queue.get()
 
             t0 = time.perf_counter_ns()
-            audio = np.concatenate([chunk.audio_numpy_normalized[self.use_channel] for chunk in speech_segment.chunks])
+            audio = np.concatenate(
+                [
+                    chunk.audio_numpy_normalized[self.use_channel]
+                    for chunk in speech_segment.chunks
+                ]
+            )
 
-            text = model.transcribe(audio)['text']
+            text = model.transcribe(audio)["text"]
 
             t1 = time.perf_counter_ns()
 
@@ -293,6 +323,7 @@ class StartEndMonitor(Process):
 if __name__ == "__main__":
 
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("model", type=str)
     parser.add_argument("--backend", type=str, default="whisper_trt")
@@ -305,10 +336,16 @@ if __name__ == "__main__":
     speech_start = Event()
     speech_end = Event()
 
-
     asr = ASR(args.model, args.backend, speech_segments, ready_flag=asr_ready)
 
-    vad = VAD(audio_chunks, speech_segments, max_filter_window=5, ready_flag=vad_ready, speech_start_flag=speech_start, speech_end_flag=speech_end)
+    vad = VAD(
+        audio_chunks,
+        speech_segments,
+        max_filter_window=5,
+        ready_flag=vad_ready,
+        speech_start_flag=speech_start,
+        speech_end_flag=speech_end,
+    )
 
     mic = Microphone(audio_chunks)
     mon = StartEndMonitor(speech_start, speech_end)

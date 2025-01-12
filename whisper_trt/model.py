@@ -27,6 +27,7 @@ from .cache import get_cache_dir, make_cache_dir
 from .__version__ import __version__
 
 # Configure logger
+
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
@@ -73,7 +74,6 @@ class _AudioEncoderEngine(nn.Module):
 
         for block in self.blocks:
             x = block(x)
-
         x = self.ln_post(x)
         logger.debug("LayerNorm applied.")
 
@@ -85,7 +85,9 @@ class AudioEncoderTRT(nn.Module):
     Audio Encoder using TensorRT optimized engine.
     """
 
-    def __init__(self, engine: torch2trt.TRTModule, positional_embedding: torch.Tensor) -> None:
+    def __init__(
+        self, engine: torch2trt.TRTModule, positional_embedding: torch.Tensor
+    ) -> None:
         super().__init__()
         self.engine = engine
         self.register_buffer("positional_embedding", positional_embedding)
@@ -170,7 +172,10 @@ class TextDecoderTRT(nn.Module):
         """
         logger.debug("TextDecoderTRT forward pass started.")
         offset = 0
-        x = self.token_embedding(x) + self.positional_embedding[offset : offset + x.shape[-1]]
+        x = (
+            self.token_embedding(x)
+            + self.positional_embedding[offset : offset + x.shape[-1]]
+        )
         x = x.to(xa.dtype)
         logger.debug("Token and positional embeddings added.")
 
@@ -265,13 +270,13 @@ class WhisperTRT(nn.Module):
         logger.debug("Transcription started.")
         if isinstance(audio, str):
             audio = whisper.audio.load_audio(audio)
-
-        mel = whisper.audio.log_mel_spectrogram(audio, padding=whisper.audio.N_SAMPLES)[None, ...].cuda()
+        mel = whisper.audio.log_mel_spectrogram(audio, padding=whisper.audio.N_SAMPLES)[
+            None, ...
+        ].cuda()
 
         if mel.shape[2] > whisper.audio.N_FRAMES:
             mel = mel[:, :, : whisper.audio.N_FRAMES]
             logger.debug("Truncated mel spectrogram to fit N_FRAMES.")
-
         audio_features = self.embed_audio(mel)
         tokens = torch.LongTensor([[self.tokenizer.sot]]).cuda()
 
@@ -282,7 +287,6 @@ class WhisperTRT(nn.Module):
             if tokens[0, -1] == self.tokenizer.eot:
                 logger.debug(f"End of transcription detected at step {i}.")
                 break
-
         tokens = tokens[:, 2:-1]  # Remove start and end tokens
         text = self.tokenizer.decode(tokens.flatten().tolist())
         logger.debug("Transcription completed.")
@@ -294,6 +298,7 @@ class WhisperTRTBuilder:
     """
     Builder class for constructing WhisperTRT models with TensorRT optimizations.
     """
+
     model: str
     fp16_mode: bool = True
     max_workspace_size: int = 1 << 30  # 1 GB
@@ -495,6 +500,7 @@ class WhisperTRTBuilder:
         dims = ModelDimensions(**checkpoint["dims"])
 
         # Load Audio Encoder
+
         audio_encoder_engine = torch2trt.TRTModule()
         audio_encoder_engine.load_state_dict(checkpoint["audio_encoder_engine"])
         audio_encoder_extra_state = checkpoint["audio_encoder_extra_state"]
@@ -507,14 +513,19 @@ class WhisperTRTBuilder:
         logger.debug("Audio encoder loaded.")
 
         # Load Text Decoder
+
         text_decoder_engine = torch2trt.TRTModule()
         text_decoder_engine.load_state_dict(checkpoint["text_decoder_engine"])
         text_decoder_extra_state = checkpoint["text_decoder_extra_state"]
 
         text_token_embedding = nn.Embedding(dims.n_vocab, dims.n_text_state)
-        text_token_embedding.load_state_dict(text_decoder_extra_state["token_embedding"])
+        text_token_embedding.load_state_dict(
+            text_decoder_extra_state["token_embedding"]
+        )
 
-        text_positional_embedding = nn.Parameter(text_decoder_extra_state["positional_embedding"])
+        text_positional_embedding = nn.Parameter(
+            text_decoder_extra_state["positional_embedding"]
+        )
         text_ln = LayerNorm(dims.n_text_state)
         text_ln.load_state_dict(text_decoder_extra_state["ln"])
 
@@ -531,7 +542,9 @@ class WhisperTRTBuilder:
 
         tokenizer = cls.get_tokenizer()
 
-        whisper_trt = WhisperTRT(dims=dims, encoder=encoder, decoder=decoder, tokenizer=tokenizer)
+        whisper_trt = WhisperTRT(
+            dims=dims, encoder=encoder, decoder=decoder, tokenizer=tokenizer
+        )
         whisper_trt = whisper_trt.cuda().eval()
         logger.info("WhisperTRT model loaded successfully.")
 
@@ -553,7 +566,7 @@ class EnBuilder(WhisperTRTBuilder):
         )
         logger.debug("English tokenizer retrieved.")
         return tokenizer
-        
+
 
 class TinyEnBuilder(EnBuilder):
     """
@@ -613,9 +626,12 @@ def load_trt_model(
     Raises:
         RuntimeError: If the model name is not supported or if building/loading fails.
     """
-    logger.debug(f"Loading TensorRT model '{name}' with build={build} and verbose={verbose}.")
+    logger.debug(
+        f"Loading TensorRT model '{name}' with build={build} and verbose={verbose}."
+    )
 
     # Log library versions
+
     logger.debug(f"Using torch version: {torch.__version__}")
     logger.debug(f"Using TensorRT version: {tensorrt.__version__}")
 
@@ -623,7 +639,6 @@ def load_trt_model(
         error_msg = f"Model '{name}' is not supported by WhisperTRT."
         logger.error(error_msg)
         raise RuntimeError(error_msg)
-
     builder_cls = MODEL_BUILDERS[name]
 
     if path is None:
@@ -634,15 +649,15 @@ def load_trt_model(
     else:
         path = str(Path(path))
         logger.debug(f"Using provided path: {path}")
-
     if not Path(path).exists():
         if not build:
-            error_msg = f"No model found at {path}. Please set build=True to build the model."
+            error_msg = (
+                f"No model found at {path}. Please set build=True to build the model."
+            )
             logger.error(error_msg)
             raise RuntimeError(error_msg)
         logger.info(f"Model not found at {path}. Building the model.")
         builder_cls.build(path, verbose=verbose)
-
     try:
         model = builder_cls.load(path)
         logger.info(f"Model '{name}' loaded successfully from '{path}'.")

@@ -42,6 +42,14 @@ jobs:
           pip install virtualenv
 
       # 5. Install CUDA Toolkit
+      - name: Install Nvidia Drivers
+        shell: bash
+        run: |
+          wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+          sudo dpkg -i cuda-keyring_1.1-1_all.deb
+          sudo apt-get update
+          sudo apt-get install -y nvidia-open
+      
       - name: Install CUDA Toolkit
         uses: Jimver/cuda-toolkit@v0.2.19
 
@@ -57,7 +65,7 @@ jobs:
         shell: bash
         run: |
           # Activate the virtual environment
-          source venv/bin/activate
+          source .venv/bin/activate
 
           # Define server URI for testing
           TEST_URI="tcp://127.0.0.1:8080"
@@ -72,11 +80,11 @@ jobs:
 
           # Start the server in the background, redirecting output to server.log
           nohup python -m wyoming_whisper_trt.__main__ \
-            --model small.en \
+            --model base.en \
             --uri $TEST_URI \
             --data-dir $DATA_DIR \
             --download-dir $DOWNLOAD_DIR \
-            --device cpu \
+            --device cuda \
             --compute-type float16 \
             --beam-size 5 \
             --language en \
@@ -92,8 +100,8 @@ jobs:
           }
 
           # Initialize timeout parameters
-          TIMEOUT=30      # Maximum time to wait for the server to start (in seconds)
-          INTERVAL=2      # Interval between each check (in seconds)
+          TIMEOUT=600      # Maximum time to wait for the server to start (in seconds)
+          INTERVAL=10      # Interval between each check (in seconds)
           ELAPSED=0
 
           # Loop to check if the server is listening
@@ -112,7 +120,7 @@ jobs:
 
           # Terminate the server gracefully
           kill $SERVER_PID
-          wait $SERVER_PID 2>/dev/null
+          wait $SERVER_PID 2>/dev/null || true
 
           # Exit the step with success
           exit 0

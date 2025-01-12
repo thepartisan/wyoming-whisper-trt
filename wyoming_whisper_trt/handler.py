@@ -19,6 +19,7 @@ from wyoming.server import AsyncEventHandler
 import whisper_trt
 
 # Configure module-specific logger
+
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
@@ -26,7 +27,9 @@ logger.addHandler(logging.NullHandler())
 class NanosecondFormatter(logging.Formatter):
     """Custom formatter to include nanoseconds in log timestamps."""
 
-    def formatTime(self, record: logging.LogRecord, datefmt: Optional[str] = None) -> str:
+    def formatTime(
+        self, record: logging.LogRecord, datefmt: Optional[str] = None
+    ) -> str:
         """Formats the time with nanosecond precision."""
         ct = record.created
         t = time.localtime(ct)
@@ -35,11 +38,13 @@ class NanosecondFormatter(logging.Formatter):
 
 
 # Set up logging with the custom formatter
-formatter = NanosecondFormatter('%(asctime)s [%(levelname)s] %(message)s')
+
+formatter = NanosecondFormatter("%(asctime)s [%(levelname)s] %(message)s")
 handler = logging.StreamHandler()
 handler.setFormatter(formatter)
 
 # Apply the formatter to the root logger
+
 root_logger = logging.getLogger()
 root_logger.setLevel(logging.DEBUG)
 root_logger.handlers = [handler]
@@ -102,19 +107,15 @@ class WhisperTrtEventHandler(AsyncEventHandler):
             if AudioChunk.is_type(event.type):
                 await self._handle_audio_chunk(event)
                 return True
-
             if AudioStop.is_type(event.type):
                 await self._handle_audio_stop()
                 return False
-
             if Transcribe.is_type(event.type):
                 await self._handle_transcribe(event)
                 return True
-
             if Describe.is_type(event.type):
                 await self._handle_describe()
                 return True
-
             return True
         except Exception as e:
             _LOGGER.error(f"Error handling event {event.type}: {e}")
@@ -131,7 +132,9 @@ class WhisperTrtEventHandler(AsyncEventHandler):
 
         if self._wave_writer is None:
             try:
-                self._wave_writer = wave.open(str(self._wav_path), "wb")  # Ensure string path
+                self._wave_writer = wave.open(
+                    str(self._wav_path), "wb"
+                )  # Ensure string path
                 self._wave_writer.setframerate(chunk.rate)
                 self._wave_writer.setsampwidth(chunk.width)
                 self._wave_writer.setnchannels(chunk.channels)
@@ -139,8 +142,8 @@ class WhisperTrtEventHandler(AsyncEventHandler):
             except wave.Error as e:
                 _LOGGER.error(f"Failed to open WAV file: {e}")
                 raise
-
         # Debug log to verify the type of self._wave_writer
+
         _LOGGER.debug(f"Type of wave writer: {type(self._wave_writer)}")
 
         self._wave_writer.writeframes(chunk.audio)
@@ -153,7 +156,6 @@ class WhisperTrtEventHandler(AsyncEventHandler):
         if self._wave_writer is None:
             _LOGGER.warning("AudioStop received but no audio was recorded.")
             return
-
         try:
             self._wave_writer.close()
             _LOGGER.debug(f"Closed WAV file at '{self._wav_path}'.")
@@ -162,7 +164,6 @@ class WhisperTrtEventHandler(AsyncEventHandler):
             raise
         finally:
             self._wave_writer = None
-
         async with self.model_lock:
             try:
                 result = await asyncio.get_event_loop().run_in_executor(
@@ -175,8 +176,8 @@ class WhisperTrtEventHandler(AsyncEventHandler):
             except Exception as e:
                 _LOGGER.error(f"Transcription failed: {e}")
                 await self.write_event(Transcript(text="Transcription failed.").event())
-
         # Reset language to CLI argument
+
         self._language = self.cli_args.language
         _LOGGER.debug(f"Reset language to '{self._language}'.")
 
