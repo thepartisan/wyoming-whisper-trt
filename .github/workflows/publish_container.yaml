@@ -24,7 +24,7 @@ jobs:
       id-token: write
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
       - name: Log in to Docker Hub
         uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
@@ -36,7 +36,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
         with:
-          images: my-docker-hub-namespace/my-docker-hub-repository
+          images: captnspdr/wyoming-whisper-trt
 
       - name: Build and push Docker image
         id: push
