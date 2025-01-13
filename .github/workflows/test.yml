@@ -1,8 +1,6 @@
 name: Test Whisper TRT ASR Server
 
 on:
-  push:
-    branches: [ main ]
   pull_request:
     branches: [ main ]
 
