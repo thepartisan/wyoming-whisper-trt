@@ -11,7 +11,7 @@ jobs:
     steps:
       # 1. Checkout the repository code
       - name: Checkout Code
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           submodules: recursive
 
@@ -30,7 +30,7 @@ jobs:
 
       # 4. Setup Python environment
       - name: Setup Python
-        uses: actions/setup-python@v5.3.0
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b
         with:
           python-version: '3.12'  # Use a stable version
 
@@ -49,7 +49,7 @@ jobs:
           sudo apt-get install -y nvidia-open
       
       - name: Install CUDA Toolkit
-        uses: Jimver/cuda-toolkit@v0.2.19
+        uses: Jimver/cuda-toolkit@4bd727d5619dc6fa323b1e76c3aa5dca94f5ec6d
 
       # 6. Create and activate virtual environment
       - name: Setup Virtual Environment
@@ -126,7 +126,7 @@ jobs:
       # 8. Upload server logs if the test fails
       - name: Upload server logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4.6.0
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
         with:
           name: server-logs
           path: server.log
