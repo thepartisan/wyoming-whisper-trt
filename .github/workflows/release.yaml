@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Fetch all history for all tags and branches
         run: git fetch --prune --unshallow
@@ -21,7 +21,7 @@ jobs:
         run: zip -x '*.git*' -r release.zip .
 
       - name: Extract owner and repo
-        uses: jungwinter/split@v2.1.0
+        uses: jungwinter/split@7f51d99e7cc1f147f6f99be75acf5e641930af88
         id: repo
         with:
           separator: '/'
