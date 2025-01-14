@@ -8,6 +8,9 @@
 # You can also reference a tag or branch, but the action may change without warning.
 
 name: Publish Docker image
+permissions:
+  contents: read
+  pull-requests: write
 
 on:
   release:
