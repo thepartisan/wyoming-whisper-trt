@@ -1,13 +1,13 @@
 name: Lint
 
-on: [push, pull_request]
+on: [pull_request]
 
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.2.2
-      - uses: psf/black@24.10.0
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: psf/black@1b2427a2b785cc4aac97c19bb4b9a0de063f9547
         with:
           options: "--check --verbose"
           version: "~= 24.0"
