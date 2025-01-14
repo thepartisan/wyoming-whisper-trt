@@ -1,4 +1,7 @@
 name: Test Whisper TRT ASR Server
+permissions:
+  contents: read
+  pull-requests: write
 
 on:
   pull_request:
