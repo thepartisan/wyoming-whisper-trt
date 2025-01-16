@@ -9,7 +9,7 @@ jobs:
   release:
     name: Release
     if: startsWith(github.ref, 'refs/heads/release')
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -39,7 +39,7 @@ jobs:
       - name: Install GitReleaseManager
         uses: gittools/actions/gitreleasemanager/setup@8fedf8a6f6cec22c9eaa66ee693f5b1f315dcbdd
         with:
-          versionSpec: '0.14.x'
+          versionSpec: '0.18.x'
 
       - name: Create release with GitReleaseManager
         uses: gittools/actions/gitreleasemanager/create@8fedf8a6f6cec22c9eaa66ee693f5b1f315dcbdd
