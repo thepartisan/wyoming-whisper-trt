@@ -47,8 +47,8 @@ jobs:
           token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
           owner: ${{ steps.repo.outputs._0 }}
           repository: ${{ steps.repo.outputs._1 }}
-          milestone: ${{ steps.gitversion.outputs.majorMinorPatch }}
-          name: Release ${{ steps.gitversion.outputs.semVer }}
+          milestone: ${{ steps.gitversion.outputs.MajorMinorPatch }}
+          name: 'Release ${{ steps.gitversion.outputs.MajorMinorPatch }}'
           assets: |
             release.zip
 
@@ -58,7 +58,7 @@ jobs:
           token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
           owner: ${{ steps.repo.outputs._0 }}
           repository: ${{ steps.repo.outputs._1 }}
-          milestone: ${{ steps.gitversion.outputs.majorMinorPatch }}
+          milestone: ${{ steps.gitversion.outputs.MajorMinorPatch }}
 
       - name: Close release with GitReleaseManager
         uses: gittools/actions/gitreleasemanager/close@bdf3e6a99aa856b1f341bc37a6eee5e70b46d0c1
@@ -66,4 +66,4 @@ jobs:
           token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
           owner: ${{ steps.repo.outputs._0 }}
           repository: ${{ steps.repo.outputs._1 }}
-          milestone: ${{ steps.gitversion.outputs.majorMinorPatch }}
+          milestone: ${{ steps.gitversion.outputs.MajorMinorPatch }}
