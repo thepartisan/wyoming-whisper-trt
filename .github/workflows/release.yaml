@@ -25,11 +25,10 @@ jobs:
         run: zip -x '*.git*' -r release.zip .
 
       - name: Extract owner and repo
-        uses: jungwinter/split@c9add84449df5452f56c8bc843653cec14eefbf4
         id: repo
-        with:
-          separator: '/'
-          msg: ${{ github.repository }}
+        run: |
+          echo "owner=${{ github.repository_owner }}" >> $GITHUB_ENV
+          echo "repository=${{ github.event.repository.name }}" >> $GITHUB_ENV
 
       - name: Install GitVersion
         uses: gittools/actions/gitversion/setup@bdf3e6a99aa856b1f341bc37a6eee5e70b46d0c1
@@ -49,8 +48,8 @@ jobs:
         uses: gittools/actions/gitreleasemanager/create@bdf3e6a99aa856b1f341bc37a6eee5e70b46d0c1
         with:
           token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
-          owner: ${{ steps.repo.outputs._0 }}
-          repository: ${{ steps.repo.outputs._1 }}
+          owner: ${{ env.owner }}
+          repository: ${{ env.repository }}
           milestone: ${{ steps.gitversion.outputs.majorMinorPatch }}
           name: 'Release ${{ steps.gitversion.outputs.majorMinorPatch }}'
           assets: |
@@ -60,14 +59,14 @@ jobs:
         uses: gittools/actions/gitreleasemanager/publish@bdf3e6a99aa856b1f341bc37a6eee5e70b46d0c1
         with:
           token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
-          owner: ${{ steps.repo.outputs._0 }}
-          repository: ${{ steps.repo.outputs._1 }}
+          owner: ${{ env.owner }}
+          repository: ${{ env.repository }}
           tagName: ${{ steps.gitversion.outputs.majorMinorPatch }}
 
       - name: Close release with GitReleaseManager
         uses: gittools/actions/gitreleasemanager/close@bdf3e6a99aa856b1f341bc37a6eee5e70b46d0c1
         with:
           token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
-          owner: ${{ steps.repo.outputs._0 }}
-          repository: ${{ steps.repo.outputs._1 }}
+          owner: ${{ env.owner }}
+          repository: ${{ env.repository }}
           milestone: ${{ steps.gitversion.outputs.majorMinorPatch }}
