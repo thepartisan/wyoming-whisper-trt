@@ -58,6 +58,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@53851d14592bedcffcf25ea515637cff71ef929a
+        with:
+          platforms: all
+
       - name: Install Nvidia Container Toolkit
         shell: bash
         run: |
