@@ -91,7 +91,7 @@ jobs:
           images: captnspdr/wyoming-whisper-trt
 
       - name: Build and Push AMD64 Image
-        id: push
+        id: push-amd64
         uses: docker/build-push-action@ca877d9245402d1537745e0e356eab47c3520991
         with:
           context: .
@@ -102,7 +102,7 @@ jobs:
           platforms: linux/amd64
 
       - name: Build and Push ARM64 Image
-        id: push
+        id: push-arm64
         uses: docker/build-push-action@ca877d9245402d1537745e0e356eab47c3520991
         with:
           context: .
@@ -115,7 +115,7 @@ jobs:
           platforms: linux/arm64
 
       - name: Build and Push ARM64 IGPU Image
-        id: push
+        id: push-arm64-igpu
         uses: docker/build-push-action@ca877d9245402d1537745e0e356eab47c3520991
         with:
           context: .
