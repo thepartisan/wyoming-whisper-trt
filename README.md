@@ -45,29 +45,11 @@ Memory consumption to transcribe 20 seconds of speech on Jetson Orin Nano. See [
 2. Install and configure the [Nvidia Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
 
 ### Docker Compose (recommended)
-For AMD64 with discrete GPUs:
+For AMD64 and ARM64 with discrete GPUs:
 ```
 services:
   wyoming-whisper-trt:
     image: captnspdr/wyoming-whisper-trt:latest
-    container_name: wyoming-whisper-trt
-    ports:
-      - 10300:10300
-    restart: unless-stopped
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-```
-
-For ARM64 with discrete GPUs:
-```
-services:
-  wyoming-whisper-trt:
-    image: captnspdr/wyoming-whisper-trt:latest-arm64
     container_name: wyoming-whisper-trt
     ports:
       - 10300:10300
@@ -105,13 +87,9 @@ services:
 2. Browse to the repository root folder
 3. Run the following command based on your platform:
    
-For AMD64 with dGPU:
+For AMD64 and ARM64 with dGPU:
 
 `docker run --gpus all --name wyoming-whisper-trt -d -p 10300:10300 captnspdr/wyoming-whisper-trt:latest`
-
-For ARM64 with dGPU:
-
-`docker run --gpus all --name wyoming-whisper-trt -d -p 10300:10300 captnspdr/wyoming-whisper-trt:latest-arm64`
 
 For ARM64 with iGPU:
 
