@@ -88,9 +88,11 @@ services:
 3. Run the following command based on your platform:
    
 For AMD64 and ARM64 with dGPU:
+
 `docker run --gpus all --name wyoming-whisper-trt -d -p 10300:10300 captnspdr/wyoming-whisper-trt:latest`
 
 For ARM64 with iGPU:
+
 `docker run --gpus all --name wyoming-whisper-trt -d -p 10300:10300 captnspdr/wyoming-whisper-trt:latest-igpu`
 
 
