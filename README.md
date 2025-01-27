@@ -86,6 +86,7 @@ services:
 1. Clone this repository
 2. Browse to the repository root folder
 3. Run the following command based on your platform:
+   
 For AMD64 and ARM64 with dGPU:
 `docker run --gpus all --name wyoming-whisper-trt -d -p 10300:10300 captnspdr/wyoming-whisper-trt:latest`
 
