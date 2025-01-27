@@ -108,9 +108,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: |
-            ${{ steps.meta.outputs.tags }}
-            type=raw,value={{steps.meta.outputs.tags}}-arm64
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/arm64
 
@@ -121,8 +119,6 @@ jobs:
           context: .
           file: ./Dockerfile.igpu
           push: true
-          tags: |
-            ${{ steps.meta.outputs.tags }}
-            type=raw,value={{steps.meta.outputs.tags}}-igpu
+          tags: ${{ steps.meta.outputs.tags }}-igpu
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/arm64
