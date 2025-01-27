@@ -110,7 +110,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.meta.outputs.tags }}
-            type=raw,value={{steps.meta.outputs.tags}}
+            type=raw,value={{steps.meta.outputs.tags}}-arm64
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/arm64
 
