@@ -98,7 +98,7 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          labels: ${{ steps.meta.outputs.labels }}-amd64
           platforms: linux/amd64
 
       - name: Build and Push ARM64 dGPU Image
@@ -109,10 +109,10 @@ jobs:
           file: ./Dockerfile.arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          labels: ${{ steps.meta.outputs.labels }}-arm64
           platforms: linux/arm64
 
-      - name: Build and Push ARM64 IGPU Image
+      - name: Build and Push ARM64 iGPU Image
         id: push-arm64-igpu
         uses: docker/build-push-action@ca877d9245402d1537745e0e356eab47c3520991
         with:
@@ -122,3 +122,19 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}-igpu
           labels: ${{ steps.meta.outputs.labels }}-igpu
           platforms: linux/arm64
+
+      - name: Create and Push Multi-Arch Manifest (dGPU)
+        if: always()
+        run: |
+          echo "Creating multi-arch manifest for dGPU images..."
+          # 'steps.meta.outputs.tags' might contain multiple tags (e.g. 'latest' and a version). 
+          # For simplicity, assume it's one main tag. If multiple, you'd parse or loop over them.
+          TAGS="${{ steps.meta.outputs.tags }}"
+
+          # Merge the two single-arch tags into one manifest
+          docker manifest create "${TAGS}" \
+            --amend "${TAGS}-amd64" \
+            --amend "${TAGS}-arm64"
+
+          # Push the updated multi-arch manifest
+          docker manifest push "${TAGS}"
