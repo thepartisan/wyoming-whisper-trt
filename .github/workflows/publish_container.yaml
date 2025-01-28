@@ -101,6 +101,17 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64
 
+      - name: Build and Push ARM64 dGPU Image
+        id: push-arm64
+        uses: docker/build-push-action@ca877d9245402d1537745e0e356eab47c3520991
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/arm64
+
       - name: Build and Push ARM64 IGPU Image
         id: push-arm64-igpu
         uses: docker/build-push-action@ca877d9245402d1537745e0e356eab47c3520991
