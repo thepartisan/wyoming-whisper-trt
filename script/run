@@ -2,11 +2,39 @@
 import sys
 import subprocess
 import venv
+import importlib.util
 from pathlib import Path
 
-_DIR = Path(__file__).parent
-_PROGRAM_DIR = _DIR.parent
-_VENV_DIR = _PROGRAM_DIR / ".venv"
+# Paths
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROGRAM_DIR = SCRIPT_DIR.parent
+VENV_DIR = PROGRAM_DIR / ".venv"
+SETUP_SCRIPT = Path("/usr/src/wyoming-whisper-trt/script/setup")
 
-context = venv.EnvBuilder().ensure_directories(_VENV_DIR)
-subprocess.check_call([context.env_exe, "-m", "wyoming_whisper_trt"] + sys.argv[1:])
+def is_package_installed(package_name: str) -> bool:
+    """
+    Check if a Python package is importable in the *current* Python environment.
+    """
+    return importlib.util.find_spec(package_name) is not None
+
+def main():
+    # 1) Conditionally run `script/setup` if `torch2trt` is not installed.
+    if not is_package_installed("torch2trt"):
+        print("torch2trt not found. Installing dependencies via script/setup...")
+        # Ensure script/setup is executable
+        subprocess.check_call(["chmod", "+x", str(SETUP_SCRIPT)])
+        # Run the setup script
+        subprocess.check_call([str(SETUP_SCRIPT)])
+    else:
+        print("torch2trt is already installed. Skipping script/setup...")
+
+    # 2) Create or ensure the virtual environment (if that's what your script does)
+    context = venv.EnvBuilder(with_pip=True).ensure_directories(VENV_DIR)
+
+    # 3) Run your main code (wyoming_whisper_trt) inside the venv
+    cmd = [context.env_exe, "-m", "wyoming_whisper_trt"] + sys.argv[1:]
+    print(f"Launching: {cmd}")
+    subprocess.check_call(cmd)
+
+if __name__ == "__main__":
+    main()
