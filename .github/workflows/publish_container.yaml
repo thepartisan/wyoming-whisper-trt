@@ -127,14 +127,18 @@ jobs:
         if: always()
         run: |
           echo "Creating multi-arch manifest for dGPU images..."
-          # 'steps.meta.outputs.tags' might contain multiple tags (e.g. 'latest' and a version). 
-          # For simplicity, assume it's one main tag. If multiple, you'd parse or loop over them.
           TAGS="${{ steps.meta.outputs.tags }}"
+          echo "TAGS are: $TAGS"
 
-          # Merge the two single-arch tags into one manifest
-          docker manifest create "${TAGS}" \
-            --amend "${TAGS}-amd64" \
-            --amend "${TAGS}-arm64"
+          # The TAGS variable might look like:
+          #   "captnspdr/wyoming-whisper-trt:1.0.3 captnspdr/wyoming-whisper-trt:latest"
+          # We need to loop over them individually:
+          for TAG in $TAGS; do
+            echo "Creating multi-arch manifest for $TAG"
+            docker manifest create "$TAG" \
+              --amend "$TAG-amd64" \
+              --amend "$TAG-arm64"
 
-          # Push the updated multi-arch manifest
-          docker manifest push "${TAGS}"
+            echo "Pushing multi-arch manifest for $TAG"
+            docker manifest push "$TAG"
+          done

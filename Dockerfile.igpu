@@ -11,8 +11,6 @@ RUN apt-get update && apt-get install -y \
     && git clone --recursive https://github.com/JonahMMay/wyoming-whisper-trt \
     && cd wyoming-whisper-trt \
     && chmod +x ./script/setup \
-    && ./script/setup \
-    && chmod +x ./script/run \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /
