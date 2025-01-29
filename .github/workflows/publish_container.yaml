@@ -97,7 +97,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: ${{ steps.meta.outputs.tags }}-amd64
           labels: ${{ steps.meta.outputs.labels }}-amd64
           platforms: linux/amd64
 
@@ -108,7 +108,7 @@ jobs:
           context: .
           file: ./Dockerfile.arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: ${{ steps.meta.outputs.tags }}-arm64
           labels: ${{ steps.meta.outputs.labels }}-arm64
           platforms: linux/arm64
 
