@@ -191,19 +191,3 @@ jobs:
           tags: ${{ steps.prepare-igpu-tags.outputs.igpu_tags }}
           labels: ${{ steps.meta.outputs.labels }}-igpu
           platforms: linux/arm64
-
-      - name: Create and Push Multi-Arch Manifest (dGPU)
-        run: |
-          echo "Creating multi-arch manifest for dGPU images..."
-          TAGS="${{ steps.meta.outputs.tags }}"
-          echo "TAGS are: $TAGS"
-
-          for TAG in $TAGS; do
-            echo "Creating multi-arch manifest for $TAG"
-            # Suffixes are -amd64 and -arm64
-            docker manifest create "$TAG" \
-              --amend "${TAG}-amd64" \
-              --amend "${TAG}-arm64"
-
-            docker manifest push "$TAG"
-          done
