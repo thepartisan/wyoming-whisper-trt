@@ -92,7 +92,6 @@ jobs:
 
       - name: Prepare AMD64 Tags
         id: prepare-amd64-tags
-        shell: bash
         run: |
           TAGS="${{ steps.meta.outputs.tags }}"
           echo "Original AMD64 TAGS: $TAGS"
@@ -103,12 +102,17 @@ jobs:
             AMD64_TAGS="${AMD64_TAGS}\n${T}-amd64"
           done
 
-          # Remove leading newline if present
-          AMD64_TAGS=$(echo -e "$AMD64_TAGS" | sed '/^$/d')
+          # Clean up any leading blank line
+          AMD64_TAGS="$(echo -e "$AMD64_TAGS" | sed '/^$/d')"
 
-          echo "amd64_tags=$AMD64_TAGS" >> $GITHUB_OUTPUT
           echo "Final AMD64 tags (multi-line):"
           echo "$AMD64_TAGS"
+
+          # -- The important part --
+          # Use the '<<EOF' syntax so GitHub Actions treats the entire block as ONE output variable
+          echo "amd64_tags<<EOF" >> $GITHUB_OUTPUT
+          echo "$AMD64_TAGS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Prepare ARM64 Tags
         id: prepare-arm64-tags
@@ -122,10 +126,16 @@ jobs:
             ARM64_TAGS="${ARM64_TAGS}\n${T}-arm64"
           done
 
-          ARM64_TAGS=$(echo -e "$ARM64_TAGS" | sed '/^$/d')
-          echo "arm64_tags=$ARM64_TAGS" >> $GITHUB_OUTPUT
+          # Remove any blank leading line
+          ARM64_TAGS="$(echo -e "$ARM64_TAGS" | sed '/^$/d')"
+
           echo "Final ARM64 tags (multi-line):"
           echo "$ARM64_TAGS"
+
+          # Use the here-doc style to create a multi-line output
+          echo "arm64_tags<<EOF" >> $GITHUB_OUTPUT
+          echo "$ARM64_TAGS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Prepare iGPU Tags
         id: prepare-igpu-tags
@@ -139,10 +149,15 @@ jobs:
             IGPU_TAGS="${IGPU_TAGS}\n${T}-igpu"
           done
 
-          IGPU_TAGS=$(echo -e "$IGPU_TAGS" | sed '/^$/d')
-          echo "igpu_tags=$IGPU_TAGS" >> $GITHUB_OUTPUT
+          IGPU_TAGS="$(echo -e "$IGPU_TAGS" | sed '/^$/d')"
+
           echo "Final iGPU tags (multi-line):"
           echo "$IGPU_TAGS"
+
+          # Use here-doc for multi-line output
+          echo "igpu_tags<<EOF" >> $GITHUB_OUTPUT
+          echo "$IGPU_TAGS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Build and Push AMD64 dGPU Image
         id: push-amd64
