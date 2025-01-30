@@ -90,6 +90,60 @@ jobs:
         with:
           images: captnspdr/wyoming-whisper-trt
 
+      - name: Prepare AMD64 Tags
+        id: prepare-amd64-tags
+        shell: bash
+        run: |
+          TAGS="${{ steps.meta.outputs.tags }}"
+          echo "Original AMD64 TAGS: $TAGS"
+
+          # We'll split by space and append '-amd64' to each
+          AMD64_TAGS=""
+          for T in $TAGS; do
+            AMD64_TAGS="${AMD64_TAGS}\n${T}-amd64"
+          done
+
+          # Remove leading newline if present
+          AMD64_TAGS=$(echo -e "$AMD64_TAGS" | sed '/^$/d')
+
+          echo "amd64_tags=$AMD64_TAGS" >> $GITHUB_OUTPUT
+          echo "Final AMD64 tags (multi-line):"
+          echo "$AMD64_TAGS"
+
+      - name: Prepare ARM64 Tags
+        id: prepare-arm64-tags
+        shell: bash
+        run: |
+          TAGS="${{ steps.meta.outputs.tags }}"
+          echo "Original ARM64 TAGS: $TAGS"
+
+          ARM64_TAGS=""
+          for T in $TAGS; do
+            ARM64_TAGS="${ARM64_TAGS}\n${T}-arm64"
+          done
+
+          ARM64_TAGS=$(echo -e "$ARM64_TAGS" | sed '/^$/d')
+          echo "arm64_tags=$ARM64_TAGS" >> $GITHUB_OUTPUT
+          echo "Final ARM64 tags (multi-line):"
+          echo "$ARM64_TAGS"
+
+      - name: Prepare iGPU Tags
+        id: prepare-igpu-tags
+        shell: bash
+        run: |
+          TAGS="${{ steps.meta.outputs.tags }}"
+          echo "Original iGPU TAGS: $TAGS"
+
+          IGPU_TAGS=""
+          for T in $TAGS; do
+            IGPU_TAGS="${IGPU_TAGS}\n${T}-igpu"
+          done
+
+          IGPU_TAGS=$(echo -e "$IGPU_TAGS" | sed '/^$/d')
+          echo "igpu_tags=$IGPU_TAGS" >> $GITHUB_OUTPUT
+          echo "Final iGPU tags (multi-line):"
+          echo "$IGPU_TAGS"
+
       - name: Build and Push AMD64 dGPU Image
         id: push-amd64
         uses: docker/build-push-action@ca877d9245402d1537745e0e356eab47c3520991
@@ -97,7 +151,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }}-amd64
+          tags: ${{ steps.prepare-amd64-tags.outputs.amd64_tags }}
           labels: ${{ steps.meta.outputs.labels }}-amd64
           platforms: linux/amd64
 
@@ -108,7 +162,7 @@ jobs:
           context: .
           file: ./Dockerfile.arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}-arm64
+          tags: ${{ steps.prepare-arm64-tags.outputs.arm64_tags }}
           labels: ${{ steps.meta.outputs.labels }}-arm64
           platforms: linux/arm64
 
@@ -119,26 +173,22 @@ jobs:
           context: .
           file: ./Dockerfile.igpu
           push: true
-          tags: ${{ steps.meta.outputs.tags }}-igpu
+          tags: ${{ steps.prepare-igpu-tags.outputs.igpu_tags }}
           labels: ${{ steps.meta.outputs.labels }}-igpu
           platforms: linux/arm64
 
       - name: Create and Push Multi-Arch Manifest (dGPU)
-        if: always()
         run: |
           echo "Creating multi-arch manifest for dGPU images..."
           TAGS="${{ steps.meta.outputs.tags }}"
           echo "TAGS are: $TAGS"
 
-          # The TAGS variable might look like:
-          #   "captnspdr/wyoming-whisper-trt:1.0.3 captnspdr/wyoming-whisper-trt:latest"
-          # We need to loop over them individually:
           for TAG in $TAGS; do
             echo "Creating multi-arch manifest for $TAG"
+            # Suffixes are -amd64 and -arm64
             docker manifest create "$TAG" \
-              --amend "$TAG-amd64" \
-              --amend "$TAG-arm64"
+              --amend "${TAG}-amd64" \
+              --amend "${TAG}-arm64"
 
-            echo "Pushing multi-arch manifest for $TAG"
             docker manifest push "$TAG"
           done
