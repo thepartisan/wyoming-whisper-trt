@@ -25,8 +25,6 @@ from whisper_trt.utils import check_file_md5, download_file
 
 from whisper_trt import load_trt_model, WhisperTRT
 
-# Configure module-specific logger
-
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
@@ -66,6 +64,7 @@ def setup_logging(debug: bool, log_format: str) -> None:
 def normalize_model_name(model_name: str) -> str:
     """
     Normalizes the model name to ensure it matches the expected format.
+    Retains language-specific suffixes to allow selection between multilingual and language-specific models.
 
     Args:
         model_name (str): The input model name.
@@ -73,43 +72,60 @@ def normalize_model_name(model_name: str) -> str:
     Returns:
         str: The normalized model name.
     """
-    mapping = {
-        "tiny": "tiny.en",
-        "base": "base.en",
-        "small": "small.en",
-        "medium": "medium.en",
-        "large": "large.en",
-    }
-    normalized_name = mapping.get(model_name.lower(), model_name)
+    normalized_name = model_name.lower()
     logger.debug(f"Normalized model name: '{model_name}' to '{normalized_name}'.")
     return normalized_name
 
 
-def extract_languages(tokenizer: WhisperTRT) -> List[str]:
+def is_language_specific(model_name: str) -> bool:
     """
-    Extracts supported languages from the tokenizer.
+    Determines if the model is language-specific based on its name.
 
     Args:
-        tokenizer (WhisperTRT): The Whisper TRT model instance.
+        model_name (str): The name of the model.
+
+    Returns:
+        bool: True if the model is language-specific, False otherwise.
+    """
+    return "." in model_name
+
+
+def extract_languages(model: WhisperTRT, model_name: str) -> List[str]:
+    """
+    Extracts supported languages from the Whisper TRT model.
+
+    Args:
+        model (WhisperTRT): The Whisper TRT model instance.
+        model_name (str): The name of the model.
 
     Returns:
         List[str]: A list of supported language codes.
     """
-    try:
-        languages = (
-            tokenizer.tokenizer.get_languages()
-        )  # Replace with the correct method if different
-        logger.debug(f"Supported languages retrieved: {languages}")
-    except AttributeError:
-        logger.warning(
-            "Tokenizer does not have 'get_languages' method. Defaulting to ['en']."
+    if is_language_specific(model_name):
+        # For example, "small.en" -> "en"
+        language_code = model_name.split(".")[-1]
+        languages = [language_code]
+        logger.debug(
+            f"Model '{model_name}' is language-specific. Supported language: {languages}"
         )
-        languages = ["en"]
-    except Exception as e:
-        logger.error(
-            f"Error retrieving languages from tokenizer: {e}. Defaulting to ['en']."
-        )
-        languages = ["en"]
+    else:
+        try:
+            # If your WhisperTRT class has a get_supported_languages() method,
+            # it would return a list of all valid language codes. If not, fallback to ["en"].
+            languages = model.get_supported_languages()
+            logger.debug(
+                f"Supported languages retrieved for model '{model_name}': {languages}"
+            )
+        except AttributeError:
+            logger.warning(
+                "Model does not have 'get_supported_languages' method. Defaulting to ['en']."
+            )
+            languages = ["en"]
+        except Exception as e:
+            logger.error(
+                f"Error retrieving languages from model: {e}. Defaulting to ['en']."
+            )
+            languages = ["en"]
     return languages
 
 
@@ -189,7 +205,7 @@ async def main() -> None:
     parser.add_argument(
         "--model",
         required=True,
-        help="Name of Whisper model to use (e.g., 'tiny.en', 'base.en', 'small.en')",
+        help="Name of Whisper model to use (e.g., 'tiny', 'small', 'small.en')",
     )
     parser.add_argument(
         "--uri",
@@ -244,31 +260,33 @@ async def main() -> None:
         version=f"%(prog)s {__version__}",
         help="Print version and exit",
     )
+
+    # Restored/added argument for default language selection
     parser.add_argument(
         "--language",
         type=str,
-        default="en",
-        help="Default language to set for transcription",
+        default="auto",
+        help="Default language to use for transcription. Use 'auto' for detection.",
     )
 
     args = parser.parse_args()
 
-    # Set download directory to the first data directory if not specified
+    # Setup logging
+    setup_logging(args.debug, args.log_format)
 
+    # Normalize model name
+    model_name = normalize_model_name(args.model)
+
+    # Determine if the model is language-specific
+    model_is_lang_specific = is_language_specific(model_name)
+    logger.debug(f"Model '{model_name}' is language-specific: {model_is_lang_specific}")
+
+    # Set download directory to first data directory if not specified
     if not args.download_dir:
         args.download_dir = args.data_dir[0]
         logger.debug(
             f"No download directory specified. Using first data directory: {args.download_dir}"
         )
-    # Setup logging
-
-    setup_logging(args.debug, args.log_format)
-
-    # Normalize model name
-
-    model_name = normalize_model_name(args.model)
-
-    # Ensure the download directory exists
 
     download_path = Path(args.download_dir)
     try:
@@ -277,43 +295,41 @@ async def main() -> None:
     except OSError as e:
         logger.error(f"Failed to create download directory at '{download_path}': {e}")
         sys.exit(1)
-    # Load Whisper TRT model
 
+    # Load Whisper TRT model
     try:
         logger.info(f"Loading Whisper TRT model '{model_name}'...")
-        whisper_model = load_trt_model(
+        trt_model = load_trt_model(
             model_name, path=str(download_path / f"{model_name}.pth"), build=True
         )
         logger.info(f"Whisper TRT model '{model_name}' loaded successfully.")
     except Exception as e:
         logger.error(f"Failed to load Whisper TRT model '{model_name}': {e}")
         sys.exit(1)
-    # Extract supported languages from the tokenizer
 
-    languages = extract_languages(whisper_model)
+    # Extract supported languages
+    languages = extract_languages(trt_model, model_name)
 
     # Build Wyoming Info
-
     wyoming_info = build_wyoming_info(model_name, languages)
 
     # Initialize asyncio lock for model access
-
     model_lock = asyncio.Lock()
     logger.debug("Initialized asyncio lock for model access.")
 
-    # Initialize the event handler factory
-
+    # Create the event handler factory, passing the user-defined language
     handler_factory_func = partial(
         WhisperTrtEventHandler,
         wyoming_info=wyoming_info,
         cli_args=args,
-        model=whisper_model,
+        model=trt_model,
         model_lock=model_lock,
         initial_prompt=args.initial_prompt,
+        model_is_lang_specific=model_is_lang_specific,
+        default_language=args.language,  # Pass the user-selected language
     )
 
     # Run the server
-
     try:
         logger.info("Starting the Whisper TRT ASR server...")
         await run_server(args.uri, handler_factory_func)
