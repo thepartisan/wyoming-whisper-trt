@@ -630,6 +630,17 @@ class SmallEnBuilder(EnBuilder):
 
     model: str = "small.en"
 
+class MediumEnBuilder(EnBuilder):
+    """Builder for 'medium.en'"""
+
+    model: str = "medium.en"
+
+
+class TinyBuilder(WhisperTRTBuilder):
+    """Builder for multilingual 'tiny'"""
+
+    model: str = "tiny"
+
 
 class BaseBuilder(WhisperTRTBuilder):
     """Builder for multilingual 'base'"""
@@ -643,20 +654,63 @@ class SmallBuilder(WhisperTRTBuilder):
     model: str = "small"
 
 
+class MediumBuilder(WhisperTRTBuilder):
+    """Builder for multilingual 'medium'"""
+
+    model: str = "medium"
+
+class LargeBuilder(WhisperTRTBuilder):
+    """Builder for multilingual 'large'"""
+
+    model: str = "large"
+
+
+class LargeV2Builder(WhisperTRTBuilder):
+    """Builder for multilingual 'large-v2'"""
+
+    model: str = "large-v2"
+
+
+class LargeV3Builder(WhisperTRTBuilder):
+    """Builder for multilingual 'large-v3'"""
+
+    model: str = "large-v3"
+
+
+class LargeV3TurboBuilder(WhisperTRTBuilder):
+    """Builder for multilingual 'large-v3-turbo'"""
+
+    model: str = "large-v3-turbo"
+
+
 MODEL_FILENAMES: Dict[str, str] = {
     "tiny.en": "tiny_en_trt.pth",
     "base.en": "base_en_trt.pth",
     "small.en": "small_en_trt.pth",
+    "medium.en": "medium_en_trt.pth",
+    "tiny": "tiny_trt.pth",
     "base": "base_trt.pth",
     "small": "small_trt.pth",
+    "medium": "medium_trt.pth",
+    "large": "large_trt.pth",
+    "large-v2": "large_v2_trt.pth",
+    "large-v3": "large_v3_trt.pth",
+    "large-v3-turbo": "large_v3_turbo_trt.pth",
 }
 
 MODEL_BUILDERS: Dict[str, Any] = {
     "tiny.en": TinyEnBuilder,
     "base.en": BaseEnBuilder,
     "small.en": SmallEnBuilder,
+    "medium.en": MediumEnBuilder,
+    "tiny": TinyBuilder,
     "base": BaseBuilder,
     "small": SmallBuilder,
+    "medium": MediumBuilder,
+    "large": LargeBuilder,
+    "large-v2": LargeV2Builder,
+    "large-v3": LargeV3Builder,
+    "large-v3-turbo": LargeV3TurboBuilder,
 }
 
 
