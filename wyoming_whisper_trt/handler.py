@@ -25,9 +25,7 @@ logger.addHandler(logging.NullHandler())
 class NanosecondFormatter(logging.Formatter):
     """Custom formatter to include nanoseconds in log timestamps."""
 
-    def formatTime(
-        self, record: logging.LogRecord, datefmt: Optional[str] = None
-    ) -> str:
+    def formatTime(self, record: logging.LogRecord, datefmt: Optional[str] = None) -> str:
         """Formats the time with nanosecond precision."""
         ct = record.created
         t = time.localtime(ct)
@@ -36,7 +34,6 @@ class NanosecondFormatter(logging.Formatter):
 
 
 # Set up logging with the custom formatter
-
 formatter = NanosecondFormatter("%(asctime)s [%(levelname)s] %(message)s")
 handler = logging.StreamHandler()
 handler.setFormatter(formatter)
@@ -60,6 +57,7 @@ class WhisperTrtEventHandler(AsyncEventHandler):
         initial_prompt: Optional[str] = None,
         *args,
         model_is_lang_specific: bool = False,
+        default_language: str = "auto",
         **kwargs,
     ) -> None:
         """
@@ -74,13 +72,16 @@ class WhisperTrtEventHandler(AsyncEventHandler):
             model_lock (asyncio.Lock): Asynchronous lock for model access.
             initial_prompt (Optional[str], optional): Initial prompt for transcription. Defaults to None.
             model_is_lang_specific (bool, optional): Indicates if the loaded model is language-specific.
+            default_language (str, optional): Default language to use for transcription. Defaults to "auto".
             *args: Variable length argument list.
             **kwargs: Arbitrary keyword arguments.
         """
-        # Remove model_is_lang_specific from kwargs to avoid passing it to AsyncEventHandler
-
+        # Remove extra arguments so the base class won't receive them.
         if "model_is_lang_specific" in kwargs:
             del kwargs["model_is_lang_specific"]
+        if "default_language" in kwargs:
+            del kwargs["default_language"]
+
         super().__init__(reader, writer, *args, **kwargs)  # Initialize the base class
 
         self.cli_args = cli_args
@@ -88,14 +89,17 @@ class WhisperTrtEventHandler(AsyncEventHandler):
         self.model = model
         self.model_lock = model_lock
         self.initial_prompt = initial_prompt
-        self._language = self.cli_args.language
+
+        # Language and model-specific flags
+        self.model_is_lang_specific = model_is_lang_specific
+        self.default_language = default_language
+
+        # Start with language from CLI or the default
+        self._language = self.cli_args.language if hasattr(self.cli_args, "language") else self.default_language
+        
         self._wav_dir = tempfile.TemporaryDirectory()
         self._wav_path = Path(self._wav_dir.name) / "speech.wav"
         self._wave_writer: Optional[wave.Wave_write] = None
-
-        # Store the language-specific flag for future logic if needed
-
-        self.model_is_lang_specific = model_is_lang_specific
 
     async def handle_event(self, event: Event) -> bool:
         """Handles incoming events from clients."""
@@ -131,6 +135,7 @@ class WhisperTrtEventHandler(AsyncEventHandler):
             except wave.Error as e:
                 logger.error(f"Failed to open WAV file: {e}")
                 raise
+
         self._wave_writer.writeframes(chunk.audio)
         logger.debug(f"Wrote {len(chunk.audio)} frames to WAV file.")
 
@@ -147,10 +152,12 @@ class WhisperTrtEventHandler(AsyncEventHandler):
             raise
         finally:
             self._wave_writer = None
+
         async with self.model_lock:
             try:
+                # Transcribe using the currently set language.
                 result = await asyncio.get_event_loop().run_in_executor(
-                    None, self.model.transcribe, str(self._wav_path)
+                    None, self.model.transcribe, str(self._wav_path), self._language
                 )
                 text = result.get("text", "")
                 logger.info(f"Transcription result: {text}")
@@ -159,9 +166,9 @@ class WhisperTrtEventHandler(AsyncEventHandler):
             except Exception as e:
                 logger.error(f"Transcription failed: {e}")
                 await self.write_event(Transcript(text="Transcription failed.").event())
-        # Reset language to CLI argument
 
-        self._language = self.cli_args.language
+        # Reset language to CLI argument or default
+        self._language = self.cli_args.language if hasattr(self.cli_args, "language") else self.default_language
         logger.debug(f"Reset language to '{self._language}'.")
 
     async def _handle_transcribe(self, event: Event) -> None:
