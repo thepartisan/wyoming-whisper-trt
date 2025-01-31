@@ -66,6 +66,7 @@ def setup_logging(debug: bool, log_format: str) -> None:
 def normalize_model_name(model_name: str) -> str:
     """
     Normalizes the model name to ensure it matches the expected format.
+    Retains language-specific suffixes to allow selection between multilingual and language-specific models.
 
     Args:
         model_name (str): The input model name.
@@ -73,17 +74,12 @@ def normalize_model_name(model_name: str) -> str:
     Returns:
         str: The normalized model name.
     """
-    mapping = {
-        "tiny": "tiny.en",
-        "base": "base.en",
-        "small": "small.en",
-        "medium": "medium.en",
-        "large": "large.en",
-    }
-    normalized_name = mapping.get(model_name.lower(), model_name)
+    # If the model name ends with a language code (e.g., '.en'), retain it for language-specific models
+    # Else, assume it's a multilingual model
+    normalized_name = model_name.lower()
     logger.debug(f"Normalized model name: '{model_name}' to '{normalized_name}'.")
     return normalized_name
-
+    
 
 def extract_languages(tokenizer: WhisperTRT) -> List[str]:
     """
