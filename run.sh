@@ -19,7 +19,7 @@ fi
 # Launch the main application
 python3 -m wyoming_whisper_trt \
     --model base \
-    --language en \
+    --language auto \
     --uri 'tcp://0.0.0.0:10300' \
     --data-dir /data \
     --download-dir /data \
