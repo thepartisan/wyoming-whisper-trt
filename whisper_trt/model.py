@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Tuple, Dict, Any, List
 
 import logging
 import torch
@@ -257,15 +257,22 @@ class WhisperTRT(nn.Module):
             return logits
 
     @torch.no_grad()
-    def transcribe(self, audio: str | np.ndarray) -> Dict[str, str]:
+    def transcribe(
+        self, audio: str | np.ndarray, language: str = "en"
+    ) -> Dict[str, str]:
         """
         Transcribe audio input to text.
 
         Args:
             audio (str | np.ndarray): Path to audio file or numpy array of audio data.
+            language (str, optional): The language code for transcription. Defaults to 'en'.
 
         Returns:
             Dict[str, str]: Transcription result.
+
+        Raises:
+            ValueError: If the specified language is not supported by the model.
+            Exception: For any other errors during transcription.
         """
         logger.debug("Transcription started.")
         if isinstance(audio, str):
@@ -596,12 +603,14 @@ MODEL_FILENAMES: Dict[str, str] = {
     "tiny.en": "tiny_en_trt.pth",
     "base.en": "base_en_trt.pth",
     "small.en": "small_en_trt.pth",
+    "small": "small_trt.pth",  # Added for multilingual model
 }
 
 MODEL_BUILDERS: Dict[str, Any] = {
     "tiny.en": TinyEnBuilder,
     "base.en": BaseEnBuilder,
     "small.en": SmallEnBuilder,
+    "small": WhisperTRTBuilder,  # Use the base builder for multilingual model
 }
 
 
@@ -615,7 +624,7 @@ def load_trt_model(
     Load a TensorRT optimized Whisper model.
 
     Args:
-        name (str): Name of the model to load (e.g., 'tiny.en', 'base.en', 'small.en').
+        name (str): Name of the model to load (e.g., 'tiny.en', 'base.en', 'small.en', 'small').
         path (Optional[str], optional): Path to the model checkpoint. If None, it will use the cache directory. Defaults to None.
         build (bool, optional): If True, builds the model if not found. Defaults to True.
         verbose (bool, optional): If True, enables verbose logging. Defaults to False.
