@@ -17,7 +17,6 @@ from whisper.model import (
     Linear,
     Tensor,
     ModelDimensions,
-    sinusoids,
     Whisper,
 )
 from whisper.tokenizer import Tokenizer, LANGUAGES, TO_LANGUAGE_CODE
@@ -322,11 +321,14 @@ class WhisperTRT(nn.Module):
             if tokens[0, -1] == self.tokenizer.eot:
                 logger.debug(f"End of transcription detected at step {i}.")
                 break
-        # 5. Remove special tokens and decode to text
+        # 5. Remove initial special tokens and decode to text
+        #    Using skip_special_tokens=True ensures tokens like <|translate|> are stripped.
 
-        tokens = tokens[:, 2:-1]  # Remove <|startoftranscript|> and <|endoftranscript|>
-        text = self.tokenizer.decode(tokens.flatten().tolist())
-        logger.debug("Transcription completed.")
+        tokens = tokens[:, 2:-1]
+        text = self.tokenizer.decode(
+            tokens.flatten().tolist(), skip_special_tokens=True
+        )
+        logger.debug(f"Final decoded text: {text}")
 
         return {"text": text}
 
@@ -513,14 +515,19 @@ class WhisperTRTBuilder:
 
     @classmethod
     def get_tokenizer(cls) -> Tokenizer:
+        """
+        Returns a tokenizer without forcing language='en'.
+        Allows multilingual or auto-detection based on the model's property.
+        """
         model = load_model(cls.model)
         tokenizer = whisper.tokenizer.get_tokenizer(
-            model.is_multilingual,
+            multilingual=model.is_multilingual,
             num_languages=model.num_languages,
-            language="en",
+            # language=None means the tokenizer won't be forced to English
+            language=None,
             task="transcribe",
         )
-        logger.debug("Tokenizer retrieved.")
+        logger.debug("Tokenizer retrieved with language=None for full multilingual.")
         return tokenizer
 
     @classmethod
@@ -593,13 +600,16 @@ class EnBuilder(WhisperTRTBuilder):
 
     @classmethod
     def get_tokenizer(cls) -> Tokenizer:
+        """
+        English-only builder: still forces language='en'.
+        """
         tokenizer = whisper.tokenizer.get_tokenizer(
-            False,  # English-only model
+            multilingual=False,  # English-only model
             num_languages=99,
             language="en",
             task="transcribe",
         )
-        logger.debug("English tokenizer retrieved.")
+        logger.debug("English tokenizer retrieved for EnBuilder.")
         return tokenizer
 
 
