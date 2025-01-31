@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+
 """
 Main entry point for the Whisper TRT server.
 
@@ -26,6 +27,7 @@ from whisper_trt.utils import check_file_md5, download_file
 from whisper_trt import load_trt_model, WhisperTRT
 
 # Configure module-specific logger
+
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -74,38 +76,63 @@ def normalize_model_name(model_name: str) -> str:
     Returns:
         str: The normalized model name.
     """
-    # If the model name ends with a language code (e.g., '.en'), retain it for language-specific models
-    # Else, assume it's a multilingual model
+    # Retain the model name as-is to allow both multilingual and language-specific models
+
     normalized_name = model_name.lower()
     logger.debug(f"Normalized model name: '{model_name}' to '{normalized_name}'.")
     return normalized_name
-    
 
-def extract_languages(tokenizer: WhisperTRT) -> List[str]:
+
+def is_language_specific(model_name: str) -> bool:
     """
-    Extracts supported languages from the tokenizer.
+    Determines if the model is language-specific based on its name.
 
     Args:
-        tokenizer (WhisperTRT): The Whisper TRT model instance.
+        model_name (str): The name of the model.
+
+    Returns:
+        bool: True if the model is language-specific, False otherwise.
+    """
+    return "." in model_name
+
+
+def extract_languages(model: WhisperTRT, model_name: str) -> List[str]:
+    """
+    Extracts supported languages from the Whisper TRT model.
+
+    Args:
+        model (WhisperTRT): The Whisper TRT model instance.
+        model_name (str): The name of the model.
 
     Returns:
         List[str]: A list of supported language codes.
     """
-    try:
-        languages = (
-            tokenizer.tokenizer.get_languages()
-        )  # Replace with the correct method if different
-        logger.debug(f"Supported languages retrieved: {languages}")
-    except AttributeError:
-        logger.warning(
-            "Tokenizer does not have 'get_languages' method. Defaulting to ['en']."
+    if is_language_specific(model_name):
+        # Extract language code from model name (e.g., 'small.en' -> 'en')
+
+        language_code = model_name.split(".")[-1]
+        languages = [language_code]
+        logger.debug(
+            f"Model '{model_name}' is language-specific. Supported language: {languages}"
         )
-        languages = ["en"]
-    except Exception as e:
-        logger.error(
-            f"Error retrieving languages from tokenizer: {e}. Defaulting to ['en']."
-        )
-        languages = ["en"]
+    else:
+        try:
+            # Assuming WhisperTRT has a method to get supported languages
+
+            languages = model.get_supported_languages()
+            logger.debug(
+                f"Supported languages retrieved for model '{model_name}': {languages}"
+            )
+        except AttributeError:
+            logger.warning(
+                "Model does not have 'get_supported_languages' method. Defaulting to ['en']."
+            )
+            languages = ["en"]
+        except Exception as e:
+            logger.error(
+                f"Error retrieving languages from model: {e}. Defaulting to ['en']."
+            )
+            languages = ["en"]
     return languages
 
 
@@ -185,7 +212,7 @@ async def main() -> None:
     parser.add_argument(
         "--model",
         required=True,
-        help="Name of Whisper model to use (e.g., 'tiny.en', 'base.en', 'small.en')",
+        help="Name of Whisper model to use (e.g., 'tiny', 'small', 'small.en')",
     )
     parser.add_argument(
         "--uri",
@@ -240,12 +267,13 @@ async def main() -> None:
         version=f"%(prog)s {__version__}",
         help="Print version and exit",
     )
-    parser.add_argument(
-        "--language",
-        type=str,
-        default="en",
-        help="Default language to set for transcription",
-    )
+    # Removed the default language argument as it will be determined based on the model
+    # parser.add_argument(
+    #     "--language",
+    #     type=str,
+    #     default="en",
+    #     help="Default language to set for transcription",
+    # )
 
     args = parser.parse_args()
 
@@ -263,6 +291,11 @@ async def main() -> None:
     # Normalize model name
 
     model_name = normalize_model_name(args.model)
+
+    # Determine if the model is language-specific
+
+    model_is_lang_specific = is_language_specific(model_name)
+    logger.debug(f"Model '{model_name}' is language-specific: {model_is_lang_specific}")
 
     # Ensure the download directory exists
 
@@ -286,7 +319,7 @@ async def main() -> None:
         sys.exit(1)
     # Extract supported languages from the tokenizer
 
-    languages = extract_languages(whisper_model)
+    languages = extract_languages(whisper_model, model_name)
 
     # Build Wyoming Info
 
@@ -306,6 +339,7 @@ async def main() -> None:
         model=whisper_model,
         model_lock=model_lock,
         initial_prompt=args.initial_prompt,
+        model_is_lang_specific=model_is_lang_specific,  # Pass the model type
     )
 
     # Run the server
