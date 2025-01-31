@@ -25,7 +25,9 @@ logger.addHandler(logging.NullHandler())
 class NanosecondFormatter(logging.Formatter):
     """Custom formatter to include nanoseconds in log timestamps."""
 
-    def formatTime(self, record: logging.LogRecord, datefmt: Optional[str] = None) -> str:
+    def formatTime(
+        self, record: logging.LogRecord, datefmt: Optional[str] = None
+    ) -> str:
         """Formats the time with nanosecond precision."""
         ct = record.created
         t = time.localtime(ct)
@@ -34,6 +36,7 @@ class NanosecondFormatter(logging.Formatter):
 
 
 # Set up logging with the custom formatter
+
 formatter = NanosecondFormatter("%(asctime)s [%(levelname)s] %(message)s")
 handler = logging.StreamHandler()
 handler.setFormatter(formatter)
@@ -77,11 +80,11 @@ class WhisperTrtEventHandler(AsyncEventHandler):
             **kwargs: Arbitrary keyword arguments.
         """
         # Remove extra arguments so the base class won't receive them.
+
         if "model_is_lang_specific" in kwargs:
             del kwargs["model_is_lang_specific"]
         if "default_language" in kwargs:
             del kwargs["default_language"]
-
         super().__init__(reader, writer, *args, **kwargs)  # Initialize the base class
 
         self.cli_args = cli_args
@@ -91,12 +94,18 @@ class WhisperTrtEventHandler(AsyncEventHandler):
         self.initial_prompt = initial_prompt
 
         # Language and model-specific flags
+
         self.model_is_lang_specific = model_is_lang_specific
         self.default_language = default_language
 
         # Start with language from CLI or the default
-        self._language = self.cli_args.language if hasattr(self.cli_args, "language") else self.default_language
-        
+
+        self._language = (
+            self.cli_args.language
+            if hasattr(self.cli_args, "language")
+            else self.default_language
+        )
+
         self._wav_dir = tempfile.TemporaryDirectory()
         self._wav_path = Path(self._wav_dir.name) / "speech.wav"
         self._wave_writer: Optional[wave.Wave_write] = None
@@ -135,7 +144,6 @@ class WhisperTrtEventHandler(AsyncEventHandler):
             except wave.Error as e:
                 logger.error(f"Failed to open WAV file: {e}")
                 raise
-
         self._wave_writer.writeframes(chunk.audio)
         logger.debug(f"Wrote {len(chunk.audio)} frames to WAV file.")
 
@@ -152,10 +160,10 @@ class WhisperTrtEventHandler(AsyncEventHandler):
             raise
         finally:
             self._wave_writer = None
-
         async with self.model_lock:
             try:
                 # Transcribe using the currently set language.
+
                 result = await asyncio.get_event_loop().run_in_executor(
                     None, self.model.transcribe, str(self._wav_path), self._language
                 )
@@ -166,9 +174,13 @@ class WhisperTrtEventHandler(AsyncEventHandler):
             except Exception as e:
                 logger.error(f"Transcription failed: {e}")
                 await self.write_event(Transcript(text="Transcription failed.").event())
-
         # Reset language to CLI argument or default
-        self._language = self.cli_args.language if hasattr(self.cli_args, "language") else self.default_language
+
+        self._language = (
+            self.cli_args.language
+            if hasattr(self.cli_args, "language")
+            else self.default_language
+        )
         logger.debug(f"Reset language to '{self._language}'.")
 
     async def _handle_transcribe(self, event: Event) -> None:
