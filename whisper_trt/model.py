@@ -257,9 +257,7 @@ class WhisperTRT(nn.Module):
             return logits
 
     @torch.no_grad()
-    def transcribe(
-        self, audio: str | np.ndarray, language: str = "en"
-    ) -> Dict[str, str]:
+    def transcribe(self, audio: str | np.ndarray, language: str = 'en') -> Dict[str, str]:
         """
         Transcribe audio input to text.
 
@@ -599,18 +597,36 @@ class SmallEnBuilder(EnBuilder):
     model: str = "small.en"
 
 
+class BaseBuilder(WhisperTRTBuilder):
+    """
+    Builder for the 'base' multilingual model.
+    """
+
+    model: str = "base"
+
+
+class SmallBuilder(WhisperTRTBuilder):
+    """
+    Builder for the 'small' multilingual model.
+    """
+
+    model: str = "small"
+
+
 MODEL_FILENAMES: Dict[str, str] = {
     "tiny.en": "tiny_en_trt.pth",
     "base.en": "base_en_trt.pth",
     "small.en": "small_en_trt.pth",
-    "small": "small_trt.pth",  # Added for multilingual model
+    "base": "base_trt.pth",    # Added for multilingual 'base' model
+    "small": "small_trt.pth",  # Added for multilingual 'small' model
 }
 
 MODEL_BUILDERS: Dict[str, Any] = {
     "tiny.en": TinyEnBuilder,
     "base.en": BaseEnBuilder,
     "small.en": SmallEnBuilder,
-    "small": WhisperTRTBuilder,  # Use the base builder for multilingual model
+    "base": BaseBuilder,        # Added for multilingual 'base' model
+    "small": SmallBuilder,      # Added for multilingual 'small' model
 }
 
 
@@ -624,7 +640,7 @@ def load_trt_model(
     Load a TensorRT optimized Whisper model.
 
     Args:
-        name (str): Name of the model to load (e.g., 'tiny.en', 'base.en', 'small.en', 'small').
+        name (str): Name of the model to load (e.g., 'tiny.en', 'base.en', 'small.en', 'base', 'small').
         path (Optional[str], optional): Path to the model checkpoint. If None, it will use the cache directory. Defaults to None.
         build (bool, optional): If True, builds the model if not found. Defaults to True.
         verbose (bool, optional): If True, enables verbose logging. Defaults to False.
