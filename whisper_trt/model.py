@@ -321,12 +321,11 @@ class WhisperTRT(nn.Module):
             if tokens[0, -1] == self.tokenizer.eot:
                 logger.debug(f"End of transcription detected at step {i}.")
                 break
-        # 5. Remove initial special tokens and decode to text
-        #    Using skip_special_tokens=True ensures tokens like <|translate|> are stripped.
+        # 5. Decode to text
 
         tokens = tokens[:, 2:-1]
         text = self.tokenizer.decode(
-            tokens.flatten().tolist(), skip_special_tokens=True
+            tokens.flatten().tolist()
         )
         logger.debug(f"Final decoded text: {text}")
 
