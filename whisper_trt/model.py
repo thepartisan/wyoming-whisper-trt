@@ -20,13 +20,11 @@ from whisper.model import (
     sinusoids,
     Whisper,
 )
-from whisper.tokenizer import Tokenizer
+from whisper.tokenizer import Tokenizer, LANGUAGES, TO_LANGUAGE_CODE
 import whisper.audio
 
 from .cache import get_cache_dir, make_cache_dir
 from .__version__ import __version__
-
-# Configure logger
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -257,22 +255,50 @@ class WhisperTRT(nn.Module):
             return logits
 
     @torch.no_grad()
-    def transcribe(self, audio: str | np.ndarray, language: str = 'en') -> Dict[str, str]:
+    def transcribe(
+        self, audio: str | np.ndarray, language: str = "auto"
+    ) -> Dict[str, str]:
         """
-        Transcribe audio input to text.
+        Transcribe audio input to text, supporting multilingual or auto-detection.
 
         Args:
             audio (str | np.ndarray): Path to audio file or numpy array of audio data.
-            language (str, optional): The language code for transcription. Defaults to 'en'.
+            language (str, optional): The language code for transcription.
+                                      Use 'auto' to let the model detect (if supported).
+                                      Defaults to 'auto'.
 
         Returns:
             Dict[str, str]: Transcription result.
 
         Raises:
-            ValueError: If the specified language is not supported by the model.
+            ValueError: If the specified language is not supported by the model/tokenizer.
             Exception: For any other errors during transcription.
         """
         logger.debug("Transcription started.")
+
+        # 1. Handle language selection in the tokenizer
+
+        if self.tokenizer is not None:
+            if language.lower() != "auto":
+                lang_code = language.lower()
+                if lang_code not in LANGUAGES:
+                    if lang_code in TO_LANGUAGE_CODE:
+                        lang_code = TO_LANGUAGE_CODE[lang_code]
+                    else:
+                        raise ValueError(f"Unsupported language code '{language}'.")
+                self.tokenizer.language = lang_code
+                logger.debug(f"Tokenizer language set to: {lang_code}")
+            else:
+                # 'auto' => remove forced language
+
+                self.tokenizer.language = None
+                logger.debug("Tokenizer set to auto language detection.")
+        else:
+            logger.warning(
+                "No tokenizer found; transcription might fail or be monolingual."
+            )
+        # 2. Load or process the audio
+
         if isinstance(audio, str):
             audio = whisper.audio.load_audio(audio)
         mel = whisper.audio.log_mel_spectrogram(audio, padding=whisper.audio.N_SAMPLES)[
@@ -282,9 +308,13 @@ class WhisperTRT(nn.Module):
         if mel.shape[2] > whisper.audio.N_FRAMES:
             mel = mel[:, :, : whisper.audio.N_FRAMES]
             logger.debug("Truncated mel spectrogram to fit N_FRAMES.")
-        audio_features = self.embed_audio(mel)
-        tokens = torch.LongTensor([[self.tokenizer.sot]]).cuda()
+        # 3. Encode the audio
 
+        audio_features = self.embed_audio(mel)
+
+        # 4. Prepare tokens and decode step-by-step
+
+        tokens = torch.LongTensor([[self.tokenizer.sot]]).cuda()
         for i in range(self.dims.n_text_ctx):
             logits = self.logits(tokens, audio_features)
             next_tokens = logits.argmax(dim=-1)
@@ -292,11 +322,33 @@ class WhisperTRT(nn.Module):
             if tokens[0, -1] == self.tokenizer.eot:
                 logger.debug(f"End of transcription detected at step {i}.")
                 break
-        tokens = tokens[:, 2:-1]  # Remove start and end tokens
+        # 5. Remove special tokens and decode to text
+
+        tokens = tokens[:, 2:-1]  # Remove <|startoftranscript|> and <|endoftranscript|>
         text = self.tokenizer.decode(tokens.flatten().tolist())
         logger.debug("Transcription completed.")
 
         return {"text": text}
+
+    @torch.no_grad()
+    def get_supported_languages(self) -> List[str]:
+        """
+        Returns a list of supported language codes for this model.
+        If the tokenizer is missing or the model is monolingual, default to ['en'].
+        """
+        if self.tokenizer is None:
+            logger.debug("No tokenizer available. Falling back to ['en'].")
+            return ["en"]
+        try:
+            # If it's a multilingual tokenizer, this property should return valid language codes
+
+            codes = list(self.tokenizer.all_language_codes)
+            return codes if codes else ["en"]
+        except AttributeError:
+            logger.debug(
+                "Tokenizer missing 'all_language_codes'. Falling back to ['en']."
+            )
+            return ["en"]
 
 
 class WhisperTRTBuilder:
@@ -314,9 +366,6 @@ class WhisperTRTBuilder:
     def build_text_decoder_engine(cls) -> torch2trt.TRTModule:
         """
         Build the TensorRT engine for the text decoder.
-
-        Returns:
-            torch2trt.TRTModule: TensorRT optimized text decoder engine.
         """
         logger.debug(f"Building text decoder engine for model '{cls.model}'.")
         model = load_model(cls.model).cuda().eval()
@@ -362,9 +411,6 @@ class WhisperTRTBuilder:
     def build_audio_encoder_engine(cls) -> torch2trt.TRTModule:
         """
         Build the TensorRT engine for the audio encoder.
-
-        Returns:
-            torch2trt.TRTModule: TensorRT optimized audio encoder engine.
         """
         logger.debug(f"Building audio encoder engine for model '{cls.model}'.")
         model = load_model(cls.model).cuda().eval()
@@ -413,9 +459,6 @@ class WhisperTRTBuilder:
     def get_text_decoder_extra_state(cls) -> Dict[str, Any]:
         """
         Retrieve the extra state for the text decoder.
-
-        Returns:
-            Dict[str, Any]: Extra state dictionary for the text decoder.
         """
         logger.debug(f"Retrieving text decoder extra state for model '{cls.model}'.")
         model = load_model(cls.model).cuda().eval()
@@ -435,9 +478,6 @@ class WhisperTRTBuilder:
     def get_audio_encoder_extra_state(cls) -> Dict[str, Any]:
         """
         Retrieve the extra state for the audio encoder.
-
-        Returns:
-            Dict[str, Any]: Extra state dictionary for the audio encoder.
         """
         logger.debug(f"Retrieving audio encoder extra state for model '{cls.model}'.")
         model = load_model(cls.model).cuda().eval()
@@ -454,10 +494,6 @@ class WhisperTRTBuilder:
     def build(cls, output_path: str, verbose: bool = False) -> None:
         """
         Build and save the TensorRT optimized model.
-
-        Args:
-            output_path (str): Path to save the optimized model checkpoint.
-            verbose (bool, optional): If True, enables verbose logging. Defaults to False.
         """
         cls.verbose = verbose
         logger.debug(f"Building WhisperTRT model and saving to '{output_path}'.")
@@ -479,7 +515,7 @@ class WhisperTRTBuilder:
     def get_tokenizer(cls) -> Tokenizer:
         model = load_model(cls.model)
         tokenizer = whisper.tokenizer.get_tokenizer(
-            model.is_multilingual,  # Multilingual as positional argument
+            model.is_multilingual,
             num_languages=model.num_languages,
             language="en",
             task="transcribe",
@@ -489,15 +525,9 @@ class WhisperTRTBuilder:
 
     @classmethod
     @torch.no_grad()
-    def load(cls, trt_model_path: str) -> WhisperTRT:
+    def load(cls, trt_model_path: str) -> "WhisperTRT":
         """
         Load the TensorRT optimized WhisperTRT model from a checkpoint.
-
-        Args:
-            trt_model_path (str): Path to the TensorRT optimized model checkpoint.
-
-        Returns:
-            WhisperTRT: The loaded WhisperTRT model.
         """
         logger.debug(f"Loading WhisperTRT model from '{trt_model_path}'.")
         checkpoint = torch.load(trt_model_path, map_location="cuda")
@@ -564,7 +594,7 @@ class EnBuilder(WhisperTRTBuilder):
     @classmethod
     def get_tokenizer(cls) -> Tokenizer:
         tokenizer = whisper.tokenizer.get_tokenizer(
-            False,  # Multilingual set to False as positional argument
+            False,  # English-only model
             num_languages=99,
             language="en",
             task="transcribe",
@@ -574,41 +604,31 @@ class EnBuilder(WhisperTRTBuilder):
 
 
 class TinyEnBuilder(EnBuilder):
-    """
-    Builder for the 'tiny.en' model.
-    """
+    """Builder for 'tiny.en'"""
 
     model: str = "tiny.en"
 
 
 class BaseEnBuilder(EnBuilder):
-    """
-    Builder for the 'base.en' model.
-    """
+    """Builder for 'base.en'"""
 
     model: str = "base.en"
 
 
 class SmallEnBuilder(EnBuilder):
-    """
-    Builder for the 'small.en' model.
-    """
+    """Builder for 'small.en'"""
 
     model: str = "small.en"
 
 
 class BaseBuilder(WhisperTRTBuilder):
-    """
-    Builder for the 'base' multilingual model.
-    """
+    """Builder for multilingual 'base'"""
 
     model: str = "base"
 
 
 class SmallBuilder(WhisperTRTBuilder):
-    """
-    Builder for the 'small' multilingual model.
-    """
+    """Builder for multilingual 'small'"""
 
     model: str = "small"
 
@@ -617,16 +637,16 @@ MODEL_FILENAMES: Dict[str, str] = {
     "tiny.en": "tiny_en_trt.pth",
     "base.en": "base_en_trt.pth",
     "small.en": "small_en_trt.pth",
-    "base": "base_trt.pth",    # Added for multilingual 'base' model
-    "small": "small_trt.pth",  # Added for multilingual 'small' model
+    "base": "base_trt.pth",
+    "small": "small_trt.pth",
 }
 
 MODEL_BUILDERS: Dict[str, Any] = {
     "tiny.en": TinyEnBuilder,
     "base.en": BaseEnBuilder,
     "small.en": SmallEnBuilder,
-    "base": BaseBuilder,        # Added for multilingual 'base' model
-    "small": SmallBuilder,      # Added for multilingual 'small' model
+    "base": BaseBuilder,
+    "small": SmallBuilder,
 }
 
 
@@ -640,8 +660,9 @@ def load_trt_model(
     Load a TensorRT optimized Whisper model.
 
     Args:
-        name (str): Name of the model to load (e.g., 'tiny.en', 'base.en', 'small.en', 'base', 'small').
-        path (Optional[str], optional): Path to the model checkpoint. If None, it will use the cache directory. Defaults to None.
+        name (str): Name of the model (e.g., 'tiny.en', 'base.en', 'small.en', 'base', 'small').
+        path (Optional[str], optional): Path to the model checkpoint.
+                                        If None, uses the cache directory. Defaults to None.
         build (bool, optional): If True, builds the model if not found. Defaults to True.
         verbose (bool, optional): If True, enables verbose logging. Defaults to False.
 
@@ -649,13 +670,11 @@ def load_trt_model(
         WhisperTRT: The loaded WhisperTRT model.
 
     Raises:
-        RuntimeError: If the model name is not supported or if building/loading fails.
+        RuntimeError: If the model name is unsupported or if building/loading fails.
     """
     logger.debug(
         f"Loading TensorRT model '{name}' with build={build} and verbose={verbose}."
     )
-
-    # Log library versions
 
     logger.debug(f"Using torch version: {torch.__version__}")
     logger.debug(f"Using TensorRT version: {tensorrt.__version__}")
