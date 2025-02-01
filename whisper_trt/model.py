@@ -48,6 +48,7 @@ import logging
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
+
 # -----------------------------------------------------------------------------
 # AUDIO ENCODER
 # -----------------------------------------------------------------------------
@@ -185,7 +186,7 @@ class WhisperTRT(nn.Module):
         self.encoder = encoder
         self.decoder = decoder
         self.tokenizer = tokenizer
-        self.verbose = verbose  # Verbose flag
+        self.verbose = verbose
         self.stream = torch.cuda.Stream()
         # Do not enable TorchScript here.
         # self.forward = torch.jit.script(self.forward)
@@ -204,17 +205,23 @@ class WhisperTRT(nn.Module):
         self, audio: str | np.ndarray, language: str = "auto"
     ) -> Dict[str, str]:
         start_time = time.perf_counter()
-        # Load audio using pinned memory.
+        # If audio is a string, load it from file.
 
         if isinstance(audio, str):
-            audio_np = whisper.audio.load_audio(audio)
-        else:
-            audio_np = audio
-        audio_tensor = torch.tensor(audio_np, device="cpu").pin_memory()
-        mel = whisper.audio.log_mel_spectrogram(
-            audio_tensor.numpy(), padding=whisper.audio.N_SAMPLES
-        )[None, ...].cuda()
-        if int(mel.shape[2]) > whisper.audio.N_FRAMES:
+            audio = whisper.audio.load_audio(audio)
+        elif isinstance(audio, np.ndarray):
+            # Convert integer arrays to float32 if necessary.
+
+            if not np.issubdtype(audio.dtype, np.floating):
+                # Assuming 16-bit PCM
+
+                audio = audio.astype(np.float32) / 32768.0
+        # Compute mel spectrogram.
+
+        mel = whisper.audio.log_mel_spectrogram(audio, padding=whisper.audio.N_SAMPLES)[
+            None, ...
+        ].cuda()
+        if mel.shape[2] > whisper.audio.N_FRAMES:
             mel = mel[:, :, : whisper.audio.N_FRAMES]
         load_time = time.perf_counter() - start_time
 
@@ -236,7 +243,7 @@ class WhisperTRT(nn.Module):
 
             max_len = self.dims.n_text_ctx + 1
             out_tokens = torch.empty((1, max_len), dtype=torch.long).cuda()
-            out_tokens[0, 0] = self.tokenizer.sot
+            out_tokens[0, 0] = self.tokenizer.sot  # set start-of-transcription token
             cur_len = 1
             decode_start = time.perf_counter()
             for i in range(1, max_len):
@@ -270,10 +277,11 @@ class WhisperTRT(nn.Module):
         mel_list = []
         for audio in audios:
             if isinstance(audio, str):
-                audio_np = whisper.audio.load_audio(audio)
-            else:
-                audio_np = audio
-            audio_tensor = torch.tensor(audio_np, device="cpu").pin_memory()
+                audio = whisper.audio.load_audio(audio)
+            elif isinstance(audio, np.ndarray):
+                if not np.issubdtype(audio.dtype, np.floating):
+                    audio = audio.astype(np.float32) / 32768.0
+            audio_tensor = torch.tensor(audio, device="cpu").pin_memory()
             mel = whisper.audio.log_mel_spectrogram(
                 audio_tensor.numpy(), padding=whisper.audio.N_SAMPLES
             )
