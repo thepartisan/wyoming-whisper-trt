@@ -1,48 +1,69 @@
-import re
-from pathlib import Path
-from typing import Optional, Tuple, Dict, Any, List
+# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: MIT
+#
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+# DEALINGS IN THE SOFTWARE.
 
-import logging
+
+import argparse
+import os
+import psutil
+import re
+import time
+from typing import Optional, Dict, Any, List
+
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+import torch.nn as nn
 import torch2trt
 import tensorrt
 
-from dataclasses import asdict
-
 from whisper import load_model
-from whisper.model import (
-    LayerNorm,
-    Linear,
-    Tensor,
-    ModelDimensions,
-    Whisper,
-)
+from whisper.model import LayerNorm, Linear, Tensor, ModelDimensions, sinusoids, Whisper
 from whisper.tokenizer import Tokenizer, LANGUAGES, TO_LANGUAGE_CODE
 import whisper.audio
+from dataclasses import asdict
 
 from .cache import get_cache_dir, make_cache_dir
 from .__version__ import __version__
 
+import logging
+
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
+
+
+# -----------------------------------------------------------------------------
+# AUDIO ENCODER
+# -----------------------------------------------------------------------------
 
 
 class _AudioEncoderEngine(nn.Module):
     """
     Audio Encoder Engine for Whisper TRT.
 
-    This module allows for online substitution of positional embeddings.
+    This module allows for online substitution of the positional embedding.
+    (This implementation preserves the original logic.)
     """
 
     def __init__(
-        self,
-        conv1: nn.Conv1d,
-        conv2: nn.Conv1d,
-        blocks: nn.ModuleList,
-        ln_post: LayerNorm,
+        self, conv1: nn.Conv1d, conv2: nn.Conv1d, blocks: nn.Module, ln_post: LayerNorm
     ) -> None:
         super().__init__()
         self.conv1 = conv1
@@ -52,35 +73,20 @@ class _AudioEncoderEngine(nn.Module):
 
     @torch.no_grad()
     def forward(self, x: Tensor, positional_embedding: Tensor) -> Tensor:
-        """
-        Forward pass for the Audio Encoder.
-
-        Args:
-            x (Tensor): Input tensor.
-            positional_embedding (Tensor): Positional embeddings.
-
-        Returns:
-            Tensor: Output tensor after encoding.
-        """
-        logger.debug("AudioEncoderEngine forward pass started.")
         x = F.gelu(self.conv1(x))
         x = F.gelu(self.conv2(x))
         x = x.permute(0, 2, 1)
-
         x = (x + positional_embedding).to(x.dtype)
-        logger.debug("Positional embedding added.")
-
         for block in self.blocks:
             x = block(x)
         x = self.ln_post(x)
-        logger.debug("LayerNorm applied.")
-
         return x
 
 
 class AudioEncoderTRT(nn.Module):
     """
-    Audio Encoder using TensorRT optimized engine.
+    Audio Encoder using the TRT optimized engine.
+    (This preserves the original method of slicing the positional embedding.)
     """
 
     def __init__(
@@ -92,19 +98,15 @@ class AudioEncoderTRT(nn.Module):
 
     @torch.no_grad()
     def forward(self, x: Tensor) -> Tensor:
-        """
-        Forward pass for the Audio Encoder TRT.
-
-        Args:
-            x (Tensor): Input tensor.
-
-        Returns:
-            Tensor: Encoded audio features.
-        """
-        n_audio_ctx = x.shape[2] // 2
+        n_audio_ctx = int(x.shape[2] // 2)
         pos_embed = self.positional_embedding[-n_audio_ctx:, :]
-        logger.debug(f"Using positional embedding with context size: {n_audio_ctx}")
-        return self.engine(x, pos_embed)
+        x = self.engine(x, pos_embed)
+        return x
+
+
+# -----------------------------------------------------------------------------
+# TEXT DECODER
+# -----------------------------------------------------------------------------
 
 
 class _TextDecoderEngine(nn.Module):
@@ -112,24 +114,12 @@ class _TextDecoderEngine(nn.Module):
     Text Decoder Engine for Whisper TRT.
     """
 
-    def __init__(self, blocks: nn.ModuleList) -> None:
+    def __init__(self, blocks: nn.Module) -> None:
         super().__init__()
         self.blocks = blocks
 
     @torch.no_grad()
     def forward(self, x: Tensor, xa: Tensor, mask: Tensor) -> Tensor:
-        """
-        Forward pass for the Text Decoder.
-
-        Args:
-            x (Tensor): Input tensor.
-            xa (Tensor): Audio features tensor.
-            mask (Tensor): Attention mask tensor.
-
-        Returns:
-            Tensor: Output tensor after decoding.
-        """
-        logger.debug("TextDecoderEngine forward pass started.")
         for block in self.blocks:
             x = block(x, xa, mask)
         return x
@@ -137,7 +127,7 @@ class _TextDecoderEngine(nn.Module):
 
 class TextDecoderTRT(nn.Module):
     """
-    Text Decoder using TensorRT optimized engine.
+    Text Decoder using the TRT optimized engine.
     """
 
     def __init__(
@@ -146,7 +136,7 @@ class TextDecoderTRT(nn.Module):
         token_embedding: nn.Embedding,
         positional_embedding: nn.Parameter,
         ln: LayerNorm,
-        mask: Tensor,
+        mask: torch.Tensor,
     ) -> None:
         super().__init__()
         self.engine = engine
@@ -157,40 +147,30 @@ class TextDecoderTRT(nn.Module):
 
     @torch.no_grad()
     def forward(self, x: Tensor, xa: Tensor) -> Tensor:
-        """
-        Forward pass for the Text Decoder TRT.
-
-        Args:
-            x (Tensor): Input tokens tensor.
-            xa (Tensor): Audio features tensor.
-
-        Returns:
-            Tensor: Logits tensor.
-        """
-        logger.debug("TextDecoderTRT forward pass started.")
         offset = 0
-        x = (
-            self.token_embedding(x)
-            + self.positional_embedding[offset : offset + x.shape[-1]]
-        )
-        x = x.to(xa.dtype)
-        logger.debug("Token and positional embeddings added.")
-
-        x = self.engine(x, xa, self.mask)
-        logger.debug("Engine processed the input.")
-
+        token_emb = self.token_embedding(x).to(xa.device)
+        pos_emb = self.positional_embedding[offset : offset + x.shape[-1]].to(xa.device)
+        x = token_emb + pos_emb
+        mask = self.mask.to(xa.device)
+        x = self.engine(x, xa, mask)
         x = self.ln(x)
-        logger.debug("LayerNorm applied.")
-
-        logits = (x @ self.token_embedding.weight.to(x.dtype).transpose(0, 1)).float()
-        logger.debug("Logits computed.")
-
+        weight = self.token_embedding.weight.to(x.device)
+        logits = (x @ torch.transpose(weight, 0, 1)).float()
         return logits
+
+
+# -----------------------------------------------------------------------------
+# WHISPER TRT MODEL
+# -----------------------------------------------------------------------------
 
 
 class WhisperTRT(nn.Module):
     """
     Whisper model optimized with TensorRT.
+
+    This implementation preserves the original transcription behavior.
+    It supports multiple languages via the language parameter in transcribe().
+    It uses a dedicated non-default CUDA stream.
     """
 
     def __init__(
@@ -199,135 +179,203 @@ class WhisperTRT(nn.Module):
         encoder: AudioEncoderTRT,
         decoder: TextDecoderTRT,
         tokenizer: Optional[Tokenizer] = None,
+        verbose: bool = False,
     ) -> None:
         super().__init__()
         self.dims = dims
         self.encoder = encoder
         self.decoder = decoder
         self.tokenizer = tokenizer
-        self.stream = torch.cuda.Stream()  # Create a CUDA stream
+        self.verbose = verbose
+        self.stream = torch.cuda.Stream()
+        # Do not enable TorchScript here.
+        # self.forward = torch.jit.script(self.forward)
 
     def embed_audio(self, mel: Tensor) -> Tensor:
-        with torch.cuda.stream(self.stream):
-            logger.debug("Embedding audio features.")
-            return self.encoder(mel)
+        return self.encoder(mel)
 
-    def logits(self, tokens: Tensor, audio_features: Tensor) -> Tensor:
-        with torch.cuda.stream(self.stream):
-            logger.debug("Computing logits.")
-            return self.decoder(tokens, audio_features)
+    def logits(self, tokens: torch.Tensor, audio_features: Tensor) -> Tensor:
+        return self.decoder(tokens, audio_features)
 
-    def forward(self, mel: Tensor, tokens: Tensor) -> Tensor:
-        with torch.cuda.stream(self.stream):
-            logger.debug("WhisperTRT forward pass started.")
-            audio_features = self.encoder(mel)
-            return self.decoder(tokens, audio_features)
+    def forward(self, mel: Tensor, tokens: torch.Tensor) -> Tensor:
+        return self.decoder(tokens, self.encoder(mel))
 
     @torch.no_grad()
     def transcribe(
         self, audio: str | np.ndarray, language: str = "auto"
     ) -> Dict[str, str]:
-        """
-        Transcribe audio input to text, supporting multilingual or auto-detection.
-        """
-        logger.debug("Transcription started.")
+        start_time = time.perf_counter()
+        # If audio is a string, load it from file.
 
-        # 1. Handle language selection in the tokenizer
-        if self.tokenizer is not None:
-            if language.lower() != "auto":
-                lang_code = language.lower()
-                if lang_code not in LANGUAGES and lang_code not in TO_LANGUAGE_CODE:
-                    raise ValueError(f"Unsupported language code '{language}'.")
-                if lang_code in TO_LANGUAGE_CODE:
-                    lang_code = TO_LANGUAGE_CODE[lang_code]
-                self.tokenizer.language = lang_code
-                logger.debug(f"Tokenizer language set to: {lang_code}")
-            else:
-                self.tokenizer.language = None
-                logger.debug("Tokenizer set to auto language detection.")
-        else:
-            logger.warning(
-                "No tokenizer found; transcription might fail or be monolingual."
-            )
-
-        # 2. Load/process audio
         if isinstance(audio, str):
             audio = whisper.audio.load_audio(audio)
+        elif isinstance(audio, np.ndarray):
+            # Convert integer arrays to float32 if necessary.
+
+            if not np.issubdtype(audio.dtype, np.floating):
+                # Assuming 16-bit PCM
+
+                audio = audio.astype(np.float32) / 32768.0
+        # Compute mel spectrogram.
+
         mel = whisper.audio.log_mel_spectrogram(audio, padding=whisper.audio.N_SAMPLES)[
             None, ...
         ].cuda()
-
         if mel.shape[2] > whisper.audio.N_FRAMES:
             mel = mel[:, :, : whisper.audio.N_FRAMES]
-            logger.debug("Truncated mel spectrogram to fit N_FRAMES.")
+        load_time = time.perf_counter() - start_time
 
-        # 3. Encode
-        audio_features = self.embed_audio(mel)
+        with torch.cuda.stream(self.stream):
+            audio_features = self.embed_audio(mel)
+            if self.tokenizer is not None:
+                if language.lower() != "auto":
+                    lang_code = language.lower()
+                    if lang_code in TO_LANGUAGE_CODE:
+                        lang_code = TO_LANGUAGE_CODE[lang_code]
+                    self.tokenizer.language = lang_code
+                    logger.debug("Tokenizer language set to: %s", lang_code)
+                else:
+                    self.tokenizer.language = None
+                    logger.debug("Tokenizer set to auto language detection.")
+            else:
+                logger.warning("No tokenizer found; transcription may be degraded.")
+            # --- Optimized Decoding Loop (Preallocated) ---
 
-        # 4. Decode token-by-token
-        tokens = torch.LongTensor([[self.tokenizer.sot]]).cuda()
-        for i in range(self.dims.n_text_ctx):
-            logits = self.logits(tokens, audio_features)
-            next_tokens = logits.argmax(dim=-1)
-            tokens = torch.cat([tokens, next_tokens[:, -1:]], dim=-1)
-            if tokens[0, -1] == self.tokenizer.eot:
-                logger.debug(f"End of transcription detected at step {i}.")
-                break
-
-        # 5. Manually remove special tokens from the final text
-        tokens = tokens[:, 2:-1]
-        text = self.tokenizer.decode(tokens.flatten().tolist())
-
-        # Remove placeholders like <|...|> using regex
-        text = re.sub(r"<\|.*?\|>", "", text)
-        logger.debug(f"Final decoded text after regex filter: {text}")
-
+            max_len = self.dims.n_text_ctx + 1
+            out_tokens = torch.empty((1, max_len), dtype=torch.long).cuda()
+            out_tokens[0, 0] = self.tokenizer.sot  # set start-of-transcription token
+            cur_len = 1
+            decode_start = time.perf_counter()
+            for i in range(1, max_len):
+                current_tokens = out_tokens[:, :cur_len]
+                logits = self.logits(current_tokens, audio_features)
+                next_token = logits.argmax(dim=-1)[:, -1]
+                out_tokens[0, cur_len] = next_token
+                cur_len += 1
+                if next_token.item() == self.tokenizer.eot:
+                    break
+            tokens = out_tokens[:, 2 : cur_len - 1]
+            text = self.tokenizer.decode(list(tokens.flatten().cpu().numpy()))
+            text = re.sub(r"<\|transcribe\|><\|notimestamps\|>", "", text).strip()
+            decode_time = time.perf_counter() - decode_start
+        self.stream.synchronize()
+        total_time = time.perf_counter() - start_time
+        if self.verbose:
+            logger.info(
+                "Audio load & mel: %.1f ms, Decoding: %.1f ms, Total: %.1f ms",
+                load_time * 1000,
+                decode_time * 1000,
+                total_time * 1000,
+            )
         return {"text": text}
 
     @torch.no_grad()
-    def get_supported_languages(self) -> List[str]:
-        """
-        Returns a list of supported language codes for this model.
-        If the tokenizer is missing or the model is monolingual, default to ['en'].
-        """
-        if self.tokenizer is None:
-            logger.debug("No tokenizer available. Falling back to ['en'].")
-            return ["en"]
-        try:
-            codes = list(self.tokenizer.all_language_codes)
-            return codes if codes else ["en"]
-        except AttributeError:
-            logger.debug("Tokenizer missing 'all_language_codes'. Returning ['en'].")
-            return ["en"]
+    def transcribe_batch(
+        self, audios: List[str | np.ndarray], language: str = "auto"
+    ) -> List[Dict[str, str]]:
+        start_time = time.perf_counter()
+        mel_list = []
+        for audio in audios:
+            if isinstance(audio, str):
+                audio = whisper.audio.load_audio(audio)
+            elif isinstance(audio, np.ndarray):
+                if not np.issubdtype(audio.dtype, np.floating):
+                    audio = audio.astype(np.float32) / 32768.0
+            audio_tensor = torch.tensor(audio, device="cpu").pin_memory()
+            mel = whisper.audio.log_mel_spectrogram(
+                audio_tensor.numpy(), padding=whisper.audio.N_SAMPLES
+            )
+            if mel.shape[1] > whisper.audio.N_FRAMES:
+                mel = mel[:, : whisper.audio.N_FRAMES]
+            mel_list.append(mel)
+        mel_batch = np.stack(mel_list, axis=0)
+        mel_batch = torch.tensor(mel_batch).cuda()
+        load_time = time.perf_counter() - start_time
+
+        with torch.cuda.stream(self.stream):
+            audio_features = self.embed_audio(mel_batch)
+            if self.tokenizer is not None:
+                if language.lower() != "auto":
+                    lang_code = language.lower()
+                    if lang_code in TO_LANGUAGE_CODE:
+                        lang_code = TO_LANGUAGE_CODE[lang_code]
+                    self.tokenizer.language = lang_code
+                    logger.debug("Tokenizer language set to: %s", lang_code)
+                else:
+                    self.tokenizer.language = None
+                    logger.debug("Tokenizer set to auto language detection.")
+            else:
+                logger.warning("No tokenizer found; transcription may be degraded.")
+            batch_size = mel_batch.shape[0]
+            max_len = self.dims.n_text_ctx + 1
+            out_tokens = torch.empty((batch_size, max_len), dtype=torch.long).cuda()
+            out_tokens[:, 0] = self.tokenizer.sot
+            cur_len = 1
+            decode_start = time.perf_counter()
+            for i in range(1, self.dims.n_text_ctx + 1):
+                current_tokens = out_tokens[:, :cur_len]
+                logits = self.logits(current_tokens, audio_features)
+                next_tokens = logits.argmax(dim=-1)[:, -1]
+                out_tokens[:, cur_len] = next_tokens
+                cur_len += 1
+                if (next_tokens == self.tokenizer.eot).all():
+                    break
+            tokens = out_tokens[:, 2 : cur_len - 1]
+            texts = []
+            for i in range(batch_size):
+                t = self.tokenizer.decode(list(tokens[i].cpu().numpy()))
+                t = re.sub(r"<\|transcribe\|><\|notimestamps\|>", "", t).strip()
+                texts.append({"text": t})
+            decode_time = time.perf_counter() - decode_start
+        self.stream.synchronize()
+        total_time = time.perf_counter() - start_time
+        if self.verbose:
+            logger.info(
+                "Batched load & mel: %.1f ms, Batch decoding: %.1f ms, Total: %.1f ms",
+                load_time * 1000,
+                decode_time * 1000,
+                total_time * 1000,
+            )
+        return texts
+
+
+# -----------------------------------------------------------------------------
+# BUILDER CLASSES FOR MULTILINGUAL AND ENGLISH-ONLY MODELS
+# -----------------------------------------------------------------------------
 
 
 class WhisperTRTBuilder:
-    """
-    Builder class for constructing WhisperTRT models with TensorRT optimizations.
-    """
-
     model: str
     fp16_mode: bool = True
-    max_workspace_size: int = 1 << 30  # 1 GB
+    max_workspace_size: int = 1 << 30
     verbose: bool = False
+    quant_mode: str = "fp16"  # Option: "fp16" or "int8"
+    _tokenizer: Optional[Tokenizer] = None
+    _dims: Optional[ModelDimensions] = None
+
+    @classmethod
+    @torch.no_grad()
+    def _load_model_once(cls) -> ModelDimensions:
+        if cls._dims is None:
+            model_inst = load_model(cls.model).cuda().eval()
+            cls._dims = model_inst.dims
+        return cls._dims
 
     @classmethod
     @torch.no_grad()
     def build_text_decoder_engine(cls) -> torch2trt.TRTModule:
-        logger.debug(f"Building text decoder engine for model '{cls.model}'.")
-        model = load_model(cls.model).cuda().eval()
-        dims = model.dims
-
-        decoder_module = _TextDecoderEngine(model.decoder.blocks)
-
+        dims = cls._load_model_once()
+        model_inst = load_model(cls.model).cuda().eval()
+        decoder_blocks_module = _TextDecoderEngine(model_inst.decoder.blocks)
         x = torch.randn(1, 1, dims.n_text_state).cuda()
         xa = torch.randn(1, dims.n_audio_ctx, dims.n_audio_state).cuda()
         mask = torch.randn(dims.n_text_ctx, dims.n_text_ctx).cuda()
-
+        int8_mode = cls.quant_mode == "int8"
         engine = torch2trt.torch2trt(
-            decoder_module,
+            decoder_blocks_module,
             [x, xa, mask],
             use_onnx=True,
+            int8_mode=int8_mode,
             min_shapes=[
                 (1, 1, dims.n_text_state),
                 (1, 1, dims.n_audio_state),
@@ -346,38 +394,32 @@ class WhisperTRTBuilder:
             input_names=["x", "xa", "mask"],
             output_names=["output"],
             max_workspace_size=cls.max_workspace_size,
-            fp16_mode=cls.fp16_mode,
+            fp16_mode=cls.fp16_mode if not int8_mode else False,
             log_level=tensorrt.Logger.VERBOSE if cls.verbose else tensorrt.Logger.ERROR,
         )
-        logger.debug("Text decoder engine built successfully.")
         return engine
 
     @classmethod
     @torch.no_grad()
     def build_audio_encoder_engine(cls) -> torch2trt.TRTModule:
-        logger.debug(f"Building audio encoder engine for model '{cls.model}'.")
-        model = load_model(cls.model).cuda().eval()
-        dims = model.dims
-
+        dims = cls._load_model_once()
+        model_inst = load_model(cls.model).cuda().eval()
         encoder_module = _AudioEncoderEngine(
-            conv1=model.encoder.conv1,
-            conv2=model.encoder.conv2,
-            blocks=model.encoder.blocks,
-            ln_post=model.encoder.ln_post,
+            model_inst.encoder.conv1,
+            model_inst.encoder.conv2,
+            model_inst.encoder.blocks,
+            model_inst.encoder.ln_post,
         )
-
         n_frames = dims.n_audio_ctx * 2
         x = torch.randn(1, dims.n_mels, n_frames).cuda()
-        positional_embedding = model.encoder.positional_embedding.cuda().detach()
-
+        positional_embedding = model_inst.encoder.positional_embedding.cuda().detach()
+        int8_mode = cls.quant_mode == "int8"
         engine = torch2trt.torch2trt(
             encoder_module,
             [x, positional_embedding],
             use_onnx=True,
-            min_shapes=[
-                (1, dims.n_mels, 1),
-                (1, dims.n_audio_state),
-            ],
+            int8_mode=int8_mode,
+            min_shapes=[(1, dims.n_mels, 1), (1, dims.n_audio_state)],
             opt_shapes=[
                 (1, dims.n_mels, n_frames),
                 (dims.n_audio_ctx, dims.n_audio_state),
@@ -389,223 +431,170 @@ class WhisperTRTBuilder:
             input_names=["x", "positional_embedding"],
             output_names=["output"],
             max_workspace_size=cls.max_workspace_size,
-            fp16_mode=cls.fp16_mode,
+            fp16_mode=cls.fp16_mode if not int8_mode else False,
             log_level=tensorrt.Logger.VERBOSE if cls.verbose else tensorrt.Logger.ERROR,
         )
-        logger.debug("Audio encoder engine built successfully.")
         return engine
 
     @classmethod
     @torch.no_grad()
     def get_text_decoder_extra_state(cls) -> Dict[str, Any]:
-        logger.debug(f"Retrieving text decoder extra state for model '{cls.model}'.")
-        model = load_model(cls.model).cuda().eval()
-
+        model_inst = load_model(cls.model).cuda().eval()
         extra_state = {
-            "token_embedding": model.decoder.token_embedding.state_dict(),
-            "positional_embedding": model.decoder.positional_embedding,
-            "ln": model.decoder.ln.state_dict(),
-            "mask": model.decoder.mask,
+            "token_embedding": model_inst.decoder.token_embedding.state_dict(),
+            "positional_embedding": model_inst.decoder.positional_embedding,
+            "ln": model_inst.decoder.ln.state_dict(),
+            "mask": model_inst.decoder.mask,
         }
-        logger.debug("Text decoder extra state retrieved.")
         return extra_state
 
     @classmethod
     @torch.no_grad()
     def get_audio_encoder_extra_state(cls) -> Dict[str, Any]:
-        logger.debug(f"Retrieving audio encoder extra state for model '{cls.model}'.")
-        model = load_model(cls.model).cuda().eval()
-
-        extra_state = {
-            "positional_embedding": model.encoder.positional_embedding,
-        }
-        logger.debug("Audio encoder extra state retrieved.")
+        model_inst = load_model(cls.model).cuda().eval()
+        extra_state = {"positional_embedding": model_inst.encoder.positional_embedding}
         return extra_state
 
     @classmethod
     @torch.no_grad()
     def build(cls, output_path: str, verbose: bool = False) -> None:
         cls.verbose = verbose
-        logger.debug(f"Building WhisperTRT model and saving to '{output_path}'.")
-
+        dims = asdict(load_model(cls.model).dims)
         checkpoint = {
             "whisper_trt_version": __version__,
-            "dims": asdict(load_model(cls.model).dims),
+            "dims": dims,
             "text_decoder_engine": cls.build_text_decoder_engine().state_dict(),
             "text_decoder_extra_state": cls.get_text_decoder_extra_state(),
             "audio_encoder_engine": cls.build_audio_encoder_engine().state_dict(),
             "audio_encoder_extra_state": cls.get_audio_encoder_extra_state(),
         }
-
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         torch.save(checkpoint, output_path)
-        logger.info(f"WhisperTRT model saved successfully at '{output_path}'.")
 
     @classmethod
     def get_tokenizer(cls) -> Tokenizer:
-        model = load_model(cls.model)
-        tokenizer = whisper.tokenizer.get_tokenizer(
-            multilingual=model.is_multilingual,
-            num_languages=model.num_languages,
-            language=None,  # Not forcing 'en'
-            task="transcribe",
-        )
-        logger.debug("Tokenizer retrieved with language=None for multilingual usage.")
-        return tokenizer
+        if cls._tokenizer is None:
+            model_inst = load_model(cls.model)
+            cls._tokenizer = whisper.tokenizer.get_tokenizer(
+                model_inst.is_multilingual,
+                num_languages=model_inst.num_languages,
+                language=None,
+                task="transcribe",
+            )
+        return cls._tokenizer
 
     @classmethod
     @torch.no_grad()
-    def load(cls, trt_model_path: str) -> "WhisperTRT":
-        logger.debug(f"Loading WhisperTRT model from '{trt_model_path}'.")
-        checkpoint = torch.load(trt_model_path, map_location="cuda")
-
+    def load(cls, trt_model_path: str) -> WhisperTRT:
+        checkpoint = torch.load(trt_model_path)
         dims = ModelDimensions(**checkpoint["dims"])
+        # Audio encoder.
 
-        audio_encoder_engine = torch2trt.TRTModule()
+        audio_encoder_engine = torch2trt.TRTModule().cuda()
         audio_encoder_engine.load_state_dict(checkpoint["audio_encoder_engine"])
-        audio_encoder_extra_state = checkpoint["audio_encoder_extra_state"]
-        audio_positional_embedding = audio_encoder_extra_state["positional_embedding"]
+        aes = checkpoint["audio_encoder_extra_state"]
+        audio_positional_embedding = aes["positional_embedding"]
+        encoder = AudioEncoderTRT(audio_encoder_engine, audio_positional_embedding)
+        # Text decoder.
 
-        encoder = AudioEncoderTRT(
-            engine=audio_encoder_engine,
-            positional_embedding=audio_positional_embedding,
-        )
-        logger.debug("Audio encoder loaded.")
-
-        text_decoder_engine = torch2trt.TRTModule()
+        text_decoder_engine = torch2trt.TRTModule().cuda()
         text_decoder_engine.load_state_dict(checkpoint["text_decoder_engine"])
-        text_decoder_extra_state = checkpoint["text_decoder_extra_state"]
-
+        tes = checkpoint["text_decoder_extra_state"]
         text_token_embedding = nn.Embedding(dims.n_vocab, dims.n_text_state)
-        text_token_embedding.load_state_dict(
-            text_decoder_extra_state["token_embedding"]
-        )
-
-        text_positional_embedding = nn.Parameter(
-            text_decoder_extra_state["positional_embedding"]
-        )
+        text_token_embedding.load_state_dict(tes["token_embedding"])
+        text_positional_embedding = nn.Parameter(tes["positional_embedding"]).cuda()
         text_ln = LayerNorm(dims.n_text_state)
-        text_ln.load_state_dict(text_decoder_extra_state["ln"])
-
-        text_mask = text_decoder_extra_state["mask"]
-
+        text_ln.load_state_dict(tes["ln"])
+        text_mask = tes["mask"]
+        if not text_mask.is_cuda:
+            text_mask = text_mask.cuda()
         decoder = TextDecoderTRT(
-            engine=text_decoder_engine,
-            token_embedding=text_token_embedding,
-            positional_embedding=text_positional_embedding,
-            ln=text_ln,
-            mask=text_mask,
+            text_decoder_engine,
+            text_token_embedding,
+            text_positional_embedding,
+            text_ln,
+            text_mask,
         )
-        logger.debug("Text decoder loaded.")
-
-        tokenizer = cls.get_tokenizer()
-
         whisper_trt = WhisperTRT(
-            dims=dims, encoder=encoder, decoder=decoder, tokenizer=tokenizer
+            dims, encoder, decoder, cls.get_tokenizer(), verbose=cls.verbose
         )
         whisper_trt = whisper_trt.cuda().eval()
-        logger.info("WhisperTRT model loaded successfully.")
-
         return whisper_trt
 
 
-class EnBuilder(WhisperTRTBuilder):
-    """
-    English language model builder.
-    """
+# -----------------------------------------------------------------------------
+# ENGLISH-ONLY MODEL BUILDERS
+# -----------------------------------------------------------------------------
 
+
+class EnBuilder(WhisperTRTBuilder):
     @classmethod
     def get_tokenizer(cls) -> Tokenizer:
-        """
-        English-only builder: still forces language='en'.
-        """
         tokenizer = whisper.tokenizer.get_tokenizer(
-            multilingual=False,  # English-only model
-            num_languages=99,
-            language="en",
-            task="transcribe",
+            multilingual=False, num_languages=99, language="en", task="transcribe"
         )
-        logger.debug("English tokenizer retrieved for EnBuilder.")
         return tokenizer
 
 
 class TinyEnBuilder(EnBuilder):
-    """Builder for 'tiny.en'"""
-
     model: str = "tiny.en"
 
 
 class BaseEnBuilder(EnBuilder):
-    """Builder for 'base.en'"""
-
     model: str = "base.en"
 
 
 class SmallEnBuilder(EnBuilder):
-    """Builder for 'small.en'"""
-
     model: str = "small.en"
 
 
-class MediumEnBuilder(EnBuilder):
-    """Builder for 'medium.en'"""
-
-    model: str = "medium.en"
+# -----------------------------------------------------------------------------
+# MULTILINGUAL MODEL BUILDERS
+# -----------------------------------------------------------------------------
 
 
 class TinyBuilder(WhisperTRTBuilder):
-    """Builder for multilingual 'tiny'"""
-
     model: str = "tiny"
 
 
 class BaseBuilder(WhisperTRTBuilder):
-    """Builder for multilingual 'base'"""
-
     model: str = "base"
 
 
 class SmallBuilder(WhisperTRTBuilder):
-    """Builder for multilingual 'small'"""
-
     model: str = "small"
 
 
 class MediumBuilder(WhisperTRTBuilder):
-    """Builder for multilingual 'medium'"""
-
     model: str = "medium"
 
 
 class LargeBuilder(WhisperTRTBuilder):
-    """Builder for multilingual 'large'"""
-
     model: str = "large"
 
 
 class LargeV2Builder(WhisperTRTBuilder):
-    """Builder for multilingual 'large-v2'"""
-
     model: str = "large-v2"
 
 
 class LargeV3Builder(WhisperTRTBuilder):
-    """Builder for multilingual 'large-v3'"""
-
     model: str = "large-v3"
 
 
 class LargeV3TurboBuilder(WhisperTRTBuilder):
-    """Builder for multilingual 'large-v3-turbo'"""
-
     model: str = "large-v3-turbo"
 
 
-MODEL_FILENAMES: Dict[str, str] = {
+# -----------------------------------------------------------------------------
+# MODEL FILE-NAMING & BUILDER DICTIONARIES
+# -----------------------------------------------------------------------------
+
+
+MODEL_FILENAMES = {
+    # English-only models:
     "tiny.en": "tiny_en_trt.pth",
     "base.en": "base_en_trt.pth",
     "small.en": "small_en_trt.pth",
-    "medium.en": "medium_en_trt.pth",
+    # Multilingual models:
     "tiny": "tiny_trt.pth",
     "base": "base_trt.pth",
     "small": "small_trt.pth",
@@ -616,11 +605,12 @@ MODEL_FILENAMES: Dict[str, str] = {
     "large-v3-turbo": "large_v3_turbo_trt.pth",
 }
 
-MODEL_BUILDERS: Dict[str, Any] = {
+MODEL_BUILDERS = {
+    # English-only models:
     "tiny.en": TinyEnBuilder,
     "base.en": BaseEnBuilder,
     "small.en": SmallEnBuilder,
-    "medium.en": MediumEnBuilder,
+    # Multilingual models:
     "tiny": TinyBuilder,
     "base": BaseBuilder,
     "small": SmallBuilder,
@@ -633,62 +623,19 @@ MODEL_BUILDERS: Dict[str, Any] = {
 
 
 def load_trt_model(
-    name: str,
-    path: Optional[str] = None,
-    build: bool = True,
-    verbose: bool = False,
+    name: str, path: Optional[str] = None, build: bool = True, verbose: bool = False
 ) -> WhisperTRT:
-    """
-    Load a TensorRT optimized Whisper model.
-
-    Args:
-        name (str): Name of the model (e.g., 'tiny.en', 'base.en', 'small.en', 'base', 'small').
-        path (Optional[str], optional): Path to the model checkpoint.
-                                        If None, uses the cache directory. Defaults to None.
-        build (bool, optional): If True, builds the model if not found. Defaults to True.
-        verbose (bool, optional): If True, enables verbose logging. Defaults to False.
-
-    Returns:
-        WhisperTRT: The loaded WhisperTRT model.
-
-    Raises:
-        RuntimeError: If the model name is unsupported or if building/loading fails.
-    """
-    logger.debug(
-        f"Loading TensorRT model '{name}' with build={build} and verbose={verbose}."
-    )
-
-    logger.debug(f"Using torch version: {torch.__version__}")
-    logger.debug(f"Using TensorRT version: {tensorrt.__version__}")
-
     if name not in MODEL_BUILDERS:
-        error_msg = f"Model '{name}' is not supported by WhisperTRT."
-        logger.error(error_msg)
-        raise RuntimeError(error_msg)
-    builder_cls = MODEL_BUILDERS[name]
-
+        raise RuntimeError(f"Model '{name}' is not supported by WhisperTRT.")
     if path is None:
+        path = os.path.join(get_cache_dir(), MODEL_FILENAMES[name])
         make_cache_dir()
-        cache_dir = get_cache_dir()
-        path = str(Path(cache_dir) / MODEL_FILENAMES[name])
-        logger.debug(f"No path provided. Using cache path: {path}")
-    else:
-        path = str(Path(path))
-        logger.debug(f"Using provided path: {path}")
-    if not Path(path).exists():
+    builder = MODEL_BUILDERS[name]
+    if not os.path.exists(path):
         if not build:
-            error_msg = (
-                f"No model found at {path}. Please set build=True to build the model."
+            raise RuntimeError(
+                f"No model found at {path}. Please call load_trt_model with build=True."
             )
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
-        logger.info(f"Model not found at {path}. Building the model.")
-        builder_cls.build(path, verbose=verbose)
-    try:
-        model = builder_cls.load(path)
-        logger.info(f"Model '{name}' loaded successfully from '{path}'.")
-        return model
-    except Exception as e:
-        error_msg = f"Failed to load model '{name}' from '{path}': {e}"
-        logger.error(error_msg)
-        raise RuntimeError(error_msg) from e
+        else:
+            builder.build(path, verbose=verbose)
+    return builder.load(path)

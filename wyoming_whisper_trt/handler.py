@@ -2,13 +2,14 @@
 
 import argparse
 import asyncio
+import io
 import logging
-import tempfile
 import time
 import wave
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
 import torch
 from wyoming.asr import Transcribe, Transcript
 from wyoming.audio import AudioChunk, AudioStop
@@ -28,22 +29,45 @@ class NanosecondFormatter(logging.Formatter):
     def formatTime(
         self, record: logging.LogRecord, datefmt: Optional[str] = None
     ) -> str:
-        """Formats the time with nanosecond precision."""
         ct = record.created
         t = time.localtime(ct)
         s = time.strftime("%Y-%m-%d %H:%M:%S", t)
         return f"{s}.{int(ct * 1e9) % 1_000_000_000:09d}"
 
 
-# Set up logging with the custom formatter
+# Set up logging with the custom formatter.
 
 formatter = NanosecondFormatter("%(asctime)s [%(levelname)s] %(message)s")
 handler = logging.StreamHandler()
 handler.setFormatter(formatter)
-
 root_logger = logging.getLogger()
 root_logger.setLevel(logging.DEBUG)
 root_logger.handlers = [handler]
+
+
+def wav_bytes_to_np_array(wav_bytes: bytes) -> np.ndarray:
+    """
+    Read a WAV file from an in-memory bytes object and return a NumPy array of samples.
+    """
+    with wave.open(io.BytesIO(wav_bytes), "rb") as wf:
+        n_frames = wf.getnframes()
+        raw_data = wf.readframes(n_frames)
+        sample_width = wf.getsampwidth()
+        # Choose dtype based on sample width
+
+        if sample_width == 1:
+            dtype = np.uint8
+        elif sample_width == 2:
+            dtype = np.int16
+        elif sample_width == 4:
+            dtype = np.int32
+        else:
+            raise ValueError("Unsupported sample width")
+        audio = np.frombuffer(raw_data, dtype=dtype)
+        channels = wf.getnchannels()
+        if channels > 1:
+            audio = audio.reshape(-1, channels)
+        return audio
 
 
 class WhisperTrtEventHandler(AsyncEventHandler):
@@ -63,29 +87,11 @@ class WhisperTrtEventHandler(AsyncEventHandler):
         default_language: str = "auto",
         **kwargs,
     ) -> None:
-        """
-        Initializes the WhisperTrtEventHandler.
-
-        Args:
-            reader (asyncio.StreamReader): The reader stream from the client connection.
-            writer (asyncio.StreamWriter): The writer stream to the client connection.
-            wyoming_info (Info): Information about the Wyoming server.
-            cli_args (argparse.Namespace): Command-line arguments.
-            model (whisper_trt.WhisperTRT): The Whisper TRT model instance.
-            model_lock (asyncio.Lock): Asynchronous lock for model access.
-            initial_prompt (Optional[str], optional): Initial prompt for transcription. Defaults to None.
-            model_is_lang_specific (bool, optional): Indicates if the loaded model is language-specific.
-            default_language (str, optional): Default language to use for transcription. Defaults to "auto".
-            *args: Variable length argument list.
-            **kwargs: Arbitrary keyword arguments.
-        """
         # Remove extra arguments so the base class won't receive them.
 
-        if "model_is_lang_specific" in kwargs:
-            del kwargs["model_is_lang_specific"]
-        if "default_language" in kwargs:
-            del kwargs["default_language"]
-        super().__init__(reader, writer, *args, **kwargs)  # Initialize the base class
+        kwargs.pop("model_is_lang_specific", None)
+        kwargs.pop("default_language", None)
+        super().__init__(reader, writer, *args, **kwargs)
 
         self.cli_args = cli_args
         self.wyoming_info_event = wyoming_info.event()
@@ -93,12 +99,10 @@ class WhisperTrtEventHandler(AsyncEventHandler):
         self.model_lock = model_lock
         self.initial_prompt = initial_prompt
 
-        # Language and model-specific flags
+        # Language and model-specific flags.
 
         self.model_is_lang_specific = model_is_lang_specific
         self.default_language = default_language
-
-        # Start with language from CLI or the default
 
         self._language = (
             self.cli_args.language
@@ -106,8 +110,9 @@ class WhisperTrtEventHandler(AsyncEventHandler):
             else self.default_language
         )
 
-        self._wav_dir = tempfile.TemporaryDirectory()
-        self._wav_path = Path(self._wav_dir.name) / "speech.wav"
+        # Use an in-memory buffer for WAV data.
+
+        self._wav_buffer = io.BytesIO()
         self._wave_writer: Optional[wave.Wave_write] = None
 
     async def handle_event(self, event: Event) -> bool:
@@ -127,68 +132,79 @@ class WhisperTrtEventHandler(AsyncEventHandler):
                 return True
             return True
         except Exception as e:
-            logger.error(f"Error handling event {event.type}: {e}")
-            return True  # Continue handling other events
+            logger.error("Error handling event %s: %s", event.type, e)
+            return True
 
     async def _handle_audio_chunk(self, event: Event) -> None:
-        """Handles an AudioChunk event by writing audio data to a WAV file."""
+        """Handles an AudioChunk event by writing audio data to an in-memory WAV buffer."""
         chunk = AudioChunk.from_event(event)
-
         if self._wave_writer is None:
             try:
-                self._wave_writer = wave.open(str(self._wav_path), "wb")
+                # Initialize a new in-memory WAV writer.
+
+                self._wav_buffer = io.BytesIO()
+                self._wave_writer = wave.open(self._wav_buffer, "wb")
                 self._wave_writer.setframerate(chunk.rate)
                 self._wave_writer.setsampwidth(chunk.width)
                 self._wave_writer.setnchannels(chunk.channels)
-                logger.debug(f"Initialized WAV file at '{self._wav_path}'.")
+                logger.debug("Initialized in-memory WAV buffer.")
             except wave.Error as e:
-                logger.error(f"Failed to open WAV file: {e}")
+                logger.error("Failed to initialize in-memory WAV buffer: %s", e)
                 raise
+        # Write the chunk's audio data.
+
         self._wave_writer.writeframes(chunk.audio)
-        logger.debug(f"Wrote {len(chunk.audio)} frames to WAV file.")
 
     async def _handle_audio_stop(self) -> None:
-        """Handles an AudioStop event by transcribing the recorded audio."""
+        """Handles an AudioStop event by transcribing the recorded audio from memory."""
         if self._wave_writer is None:
             logger.warning("AudioStop received but no audio was recorded.")
             return
         try:
             self._wave_writer.close()
-            logger.debug(f"Closed WAV file at '{self._wav_path}'.")
+            logger.debug("Finalized in-memory WAV buffer.")
         except wave.Error as e:
-            logger.error(f"Failed to close WAV file: {e}")
+            logger.error("Failed to finalize in-memory WAV buffer: %s", e)
             raise
         finally:
             self._wave_writer = None
+        # Get the WAV data from memory.
+
+        wav_bytes = self._wav_buffer.getvalue()
+        # Convert the in-memory WAV bytes to a NumPy array.
+
+        audio_np = wav_bytes_to_np_array(wav_bytes)
         async with self.model_lock:
             try:
-                # Transcribe using the currently set language.
-
-                result = await asyncio.get_event_loop().run_in_executor(
-                    None, self.model.transcribe, str(self._wav_path), self._language
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(
+                    None, self.model.transcribe, audio_np, self._language
                 )
                 text = result.get("text", "")
-                logger.info(f"Transcription result: {text}")
+                logger.info("Transcription result: %s", text)
                 await self.write_event(Transcript(text=text).event())
                 logger.debug("Completed transcription request.")
             except Exception as e:
-                logger.error(f"Transcription failed: {e}")
+                logger.error("Transcription failed: %s", e)
                 await self.write_event(Transcript(text="Transcription failed.").event())
-        # Reset language to CLI argument or default
+        # Reset language to CLI argument or default.
 
         self._language = (
             self.cli_args.language
             if hasattr(self.cli_args, "language")
             else self.default_language
         )
-        logger.debug(f"Reset language to '{self._language}'.")
+        logger.debug("Reset language to: %s", self._language)
+        # Clean up the in-memory buffer.
+
+        self._wav_buffer.close()
 
     async def _handle_transcribe(self, event: Event) -> None:
         """Handles a Transcribe event by setting the language."""
         transcribe = Transcribe.from_event(event)
         if transcribe.language:
             self._language = transcribe.language
-            logger.debug(f"Language set to '{transcribe.language}'.")
+            logger.debug("Language set to: %s", transcribe.language)
 
     async def _handle_describe(self) -> None:
         """Handles a Describe event by sending server information."""
@@ -196,10 +212,10 @@ class WhisperTrtEventHandler(AsyncEventHandler):
             await self.write_event(self.wyoming_info_event)
             logger.debug("Sent server information.")
         except Exception as e:
-            logger.error(f"Failed to send server information: {e}")
+            logger.error("Failed to send server information: %s", e)
 
     def cleanup(self) -> None:
-        """Cleans up resources such as temporary directories."""
-        if self._wav_dir:
-            self._wav_dir.cleanup()
-            logger.debug(f"Cleaned up temporary directory '{self._wav_dir.name}'.")
+        """Cleans up resources such as the in-memory buffer."""
+        if self._wav_buffer:
+            self._wav_buffer.close()
+            logger.debug("Cleaned up in-memory WAV buffer.")
