@@ -158,6 +158,22 @@ class TextDecoderTRT(nn.Module):
         logits = (x @ torch.transpose(weight, 0, 1)).float()
         return logits
 
+    @torch.no_grad()
+    def get_supported_languages(self) -> List[str]:
+        """
+        Returns a list of supported language codes for this model.
+        If the tokenizer is missing or the model is monolingual, default to ['en'].
+        """
+        if self.tokenizer is None:
+            logger.debug("No tokenizer available. Falling back to ['en'].")
+            return ["en"]
+        try:
+            codes = list(self.tokenizer.all_language_codes)
+            return codes if codes else ["en"]
+        except AttributeError:
+            logger.debug("Tokenizer missing 'all_language_codes'. Returning ['en'].")
+            return ["en"]
+
 
 # -----------------------------------------------------------------------------
 # WHISPER TRT MODEL
