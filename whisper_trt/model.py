@@ -158,22 +158,6 @@ class TextDecoderTRT(nn.Module):
         logits = (x @ torch.transpose(weight, 0, 1)).float()
         return logits
 
-    @torch.no_grad()
-    def get_supported_languages(self) -> List[str]:
-        """
-        Returns a list of supported language codes for this model.
-        If the tokenizer is missing or the model is monolingual, default to ['en'].
-        """
-        if self.tokenizer is None:
-            logger.debug("No tokenizer available. Falling back to ['en'].")
-            return ["en"]
-        try:
-            codes = list(self.tokenizer.all_language_codes)
-            return codes if codes else ["en"]
-        except AttributeError:
-            logger.debug("Tokenizer missing 'all_language_codes'. Returning ['en'].")
-            return ["en"]
-
 
 # -----------------------------------------------------------------------------
 # WHISPER TRT MODEL
@@ -221,19 +205,13 @@ class WhisperTRT(nn.Module):
         self, audio: str | np.ndarray, language: str = "auto"
     ) -> Dict[str, str]:
         start_time = time.perf_counter()
-        # If audio is a string, load it from file.
+        # If audio is a string, load it; if a NumPy array and not floating, convert.
 
         if isinstance(audio, str):
             audio = whisper.audio.load_audio(audio)
         elif isinstance(audio, np.ndarray):
-            # Convert integer arrays to float32 if necessary.
-
             if not np.issubdtype(audio.dtype, np.floating):
-                # Assuming 16-bit PCM
-
                 audio = audio.astype(np.float32) / 32768.0
-        # Compute mel spectrogram.
-
         mel = whisper.audio.log_mel_spectrogram(audio, padding=whisper.audio.N_SAMPLES)[
             None, ...
         ].cuda()
@@ -259,7 +237,7 @@ class WhisperTRT(nn.Module):
 
             max_len = self.dims.n_text_ctx + 1
             out_tokens = torch.empty((1, max_len), dtype=torch.long).cuda()
-            out_tokens[0, 0] = self.tokenizer.sot  # set start-of-transcription token
+            out_tokens[0, 0] = self.tokenizer.sot
             cur_len = 1
             decode_start = time.perf_counter()
             for i in range(1, max_len):
@@ -353,6 +331,16 @@ class WhisperTRT(nn.Module):
                 total_time * 1000,
             )
         return texts
+
+    @torch.no_grad()
+    def get_supported_languages(self) -> List[str]:
+        """
+        Returns the list of supported languages. If the attached tokenizer has the
+        attribute 'all_language_codes', that list is returned. Otherwise, defaults to ['en'].
+        """
+        if self.tokenizer is not None and hasattr(self.tokenizer, "all_language_codes"):
+            return list(self.tokenizer.all_language_codes)
+        return ["en"]
 
 
 # -----------------------------------------------------------------------------
