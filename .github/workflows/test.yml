@@ -127,8 +127,7 @@ jobs:
           exit 0
 
       # 8. Upload server logs if the test fails
-      - name: Upload server logs on failure
-        if: failure()
+      - name: Upload server logs
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
         with:
           name: server-logs
