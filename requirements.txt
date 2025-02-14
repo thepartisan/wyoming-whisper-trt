@@ -1,7 +1,7 @@
 --extra-index-url https://pypi.nvidia.com
 wyoming==1.6.0
 openai-whisper==20240927
-psutil~=6.1.1
+psutil~=7.0.0
 tensorrt_cu12_libs~=10.8.0
 tensorrt_cu12_bindings~=10.8.0 
 tensorrt~=10.8.0
