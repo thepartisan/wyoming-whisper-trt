@@ -1,6 +1,7 @@
 services:
   wyoming-whisper-trt:
-    build: .\Dockerfile.igpu
+    context: .
+    build: Dockerfile.igpu
     container_name: wyoming-whisper-trt
     ports:
       - 10300:10300
