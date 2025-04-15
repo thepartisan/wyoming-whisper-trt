@@ -6,8 +6,8 @@ This section outlines which versions of the project are currently supported with
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.0.2   | :white_check_mark: |
-| < 1.0.2 | :x:                |
+| 1.0.10   | :white_check_mark: |
+| < 1.0.10 | :x:                |
 
 **Note**: Versions marked with a white check mark (✅) are actively supported with security updates, while versions marked with an "X" (❌) are no longer supported and may contain unpatched vulnerabilities.
 
