@@ -89,16 +89,12 @@ services:
   wyoming-whisper-trt:
     image: captnspdr/wyoming-whisper-trt:latest-igpu
     container_name: wyoming-whisper-trt
-    ports:
-      - 10300:10300
     restart: unless-stopped
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [GPU]
+    network_mode: host
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
 ```
 
 
@@ -121,10 +117,16 @@ For ARM64 with iGPU:
 
 
 
-### Docker (Latest GitHub commit, ARM64 and AMD64 with dGPU only)
+### Docker (Latest GitHub commit, ARM64 and AMD64 with dGPU)
 1. Clone this repository
 2. Browse to the repository root folder
 3. Run ``docker compose -f docker-compose-github.yaml up -d``
+
+
+### Docker (Latest GitHub commit, ARM64 with iGPU)
+1. Clone this repository
+2. Browse to the repository root folder
+3. Run ``docker compose -f docker-compose-github-igpu.yaml up -d``
 
 ## See also:
 - [torch2trt](https://github.com/NVIDIA-AI-IOT/torch2trt) - Used to convert PyTorch model to TensorRT and perform inference.
