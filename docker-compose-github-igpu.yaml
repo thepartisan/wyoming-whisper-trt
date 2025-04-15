@@ -1,0 +1,14 @@
+services:
+  wyoming-whisper-trt:
+    build: .\Dockerfile.igpu
+    container_name: wyoming-whisper-trt
+    ports:
+      - 10300:10300
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
