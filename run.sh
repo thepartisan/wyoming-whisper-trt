@@ -3,6 +3,13 @@
 # Navigate to the application directory
 cd /usr/src/wyoming-whisper-trt
 
+# Check if the virtual environment is present; if not, run setup
+if [ ! -d ".venv" ]; then
+    echo "Virtual environment (.venv) not found. Running setup..."
+    chmod +x script/setup
+    ./script/setup
+fi
+
 # Activate the Python virtual environment
 source .venv/bin/activate
 
