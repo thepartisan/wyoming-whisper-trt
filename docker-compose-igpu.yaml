@@ -1,0 +1,10 @@
+services:
+  wyoming-whisper-trt:
+    image: captnspdr/wyoming-whisper-trt:latest-igpu
+    container_name: wyoming-whisper-trt
+    restart: unless-stopped
+    network_mode: host
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
