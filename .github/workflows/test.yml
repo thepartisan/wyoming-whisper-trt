@@ -11,6 +11,7 @@ on:
       - '.vscode/**'
       - 'examples/**'
       - 'tests/**'
+      - '**/*.md'
 
 jobs:
   test_linux:
