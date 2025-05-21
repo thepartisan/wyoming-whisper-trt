@@ -7,4 +7,5 @@ tensorrt_cu12_bindings~=10.11.0
 tensorrt~=10.11.0
 packaging~=25.0
 onnx-graphsurgeon==0.5.8
-torch~=2.7.0
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.7.0+cu128
