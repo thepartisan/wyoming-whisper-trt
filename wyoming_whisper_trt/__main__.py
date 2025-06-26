@@ -27,7 +27,7 @@ from .handler import WhisperTrtEventHandler
 from whisper_trt.cache import get_cache_dir, make_cache_dir
 from whisper_trt.utils import check_file_md5, download_file
 
-from whisper_trt import load_trt_model, WhisperTRT, MODEL_FILENAMES
+from whisper_trt import load_trt_model, WhisperTRT, MODEL_FILENAMES, WhisperTRTBuilder
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -246,6 +246,7 @@ async def main() -> None:
     )
     parser.add_argument(
         "--initial-prompt",
+        default=None,
         help="Optional text to provide as a prompt for the first window",
     )
     parser.add_argument(
@@ -253,19 +254,18 @@ async def main() -> None:
         action="store_true",
         help="Enable DEBUG level logging",
     )
-    parser.add_argument(
-        "--log-format",
-        default="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        help="Format for log messages",
-    )
+
     parser.add_argument(
         "--version",
         action="version",
         version=f"%(prog)s {__version__}",
         help="Print version and exit",
     )
-
-    # Restored/added argument for default language selection
+    parser.add_argument(
+        "--log-format",
+        default="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        help="Format for log messages",
+    )
     parser.add_argument(
         "--language",
         type=str,
@@ -284,6 +284,14 @@ async def main() -> None:
     # Determine if the model is language-specific
     model_is_lang_specific = is_language_specific(model_name)
     logger.debug(f"Model '{model_name}' is language-specific: {model_is_lang_specific}")
+
+    # Set compute-type
+    if args.compute_type == "int8":
+        WhisperTRTBuilder.quant_mode = "int8"
+        WhisperTRTBuilder.fp16_mode  = False
+    elif args.compute_type == "float16":
+        WhisperTRTBuilder.quant_mode = "fp16"
+        WhisperTRTBuilder.fp16_mode  = True
 
     # Set download directory to first data directory if not specified
     if not args.download_dir:
