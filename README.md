@@ -148,15 +148,48 @@ services:
    
 For AMD64 with dGPU:
 
-`docker run --gpus all --name wyoming-whisper-trt -d -p 10300:10300 captnspdr/wyoming-whisper-trt:latest-amd64`
+```bash
+docker run \
+  --gpus all \                                # expose all NVIDIA GPUs
+  --name wyoming-whisper-trt \                # give the container a name
+  -d \                                        # run in detached mode
+  -p 10300:10300 \                            # map port 10300 → 10300
+  -e MODEL=base \                             # which model to load (tiny, small, base, etc.)
+  -e LANGUAGE=auto \                          # default transcription language (`auto` = detect)
+  -e COMPUTE_TYPE=int8 \                      # `int8` (fast) or `float16`
+  -e DEVICE=cuda \                            # `cuda` or `cpu`
+  captnspdr/wyoming-whisper-trt:latest-amd64
+```
 
 For ARM64 with dGPU:
 
-`docker run --gpus all --name wyoming-whisper-trt -d -p 10300:10300 captnspdr/wyoming-whisper-trt:latest-arm64`
+```bash
+docker run \
+  --gpus all \                                # expose all NVIDIA GPUs
+  --name wyoming-whisper-trt \                # give the container a name
+  -d \                                        # run in detached mode
+  -p 10300:10300 \                            # map port 10300 → 10300
+  -e MODEL=base \                             # which model to load (tiny, small, base, etc.)
+  -e LANGUAGE=auto \                          # default transcription language (`auto` = detect)
+  -e COMPUTE_TYPE=int8 \                      # `int8` (fast) or `float16`
+  -e DEVICE=cuda \                            # `cuda` or `cpu`
+  captnspdr/wyoming-whisper-trt:latest-arm64
+```
 
 For ARM64 with iGPU:
 
-`docker run --gpus all --name wyoming-whisper-trt -d -p 10300:10300 captnspdr/wyoming-whisper-trt:latest-igpu`
+```bash
+docker run \
+  --gpus all \                                # expose all NVIDIA GPUs
+  --name wyoming-whisper-trt \                # give the container a name
+  -d \                                        # run in detached mode
+  -p 10300:10300 \                            # map port 10300 → 10300
+  -e MODEL=base \                             # which model to load (tiny, small, base, etc.)
+  -e LANGUAGE=auto \                          # default transcription language (`auto` = detect)
+  -e COMPUTE_TYPE=int8 \                      # `int8` (fast) or `float16`
+  -e DEVICE=cuda \                            # `cuda` or `cpu`
+  captnspdr/wyoming-whisper-trt:latest-igpu
+```
 
 
 
