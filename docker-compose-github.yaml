@@ -5,6 +5,15 @@ services:
     ports:
       - 10300:10300
     restart: unless-stopped
+    environment:
+      MODEL:      "${MODEL:-base}"
+      LANGUAGE:   "${LANGUAGE:-auto}"
+      URI:        "${URI:-tcp://0.0.0.0:10300}"
+      DATA_DIR:   "${DATA_DIR:-/data}"
+      COMPUTE_TYPE: "${COMPUTE_TYPE:-int8}"
+      DEVICE:     "${DEVICE:-cuda}"
+      BEAM_SIZE:  "${BEAM_SIZE:-5}"
+      DEBUG:      "${DEBUG:-false}"
     deploy:
       resources:
         reservations:

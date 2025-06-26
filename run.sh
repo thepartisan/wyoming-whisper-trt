@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # Navigate to the application directory
 cd /usr/src/wyoming-whisper-trt
@@ -25,10 +26,11 @@ fi
 
 # Launch the main application
 python3 -m wyoming_whisper_trt \
-    --model base \
-    --language auto \
-    --uri 'tcp://0.0.0.0:10300' \
-    --data-dir /data \
-    --download-dir /data \
-    --device cuda \
-    --debug
+    --model "${MODEL:-base}" \
+    --language "${LANGUAGE:-auto}" \
+    --uri "${URI:-tcp://0.0.0.0:10300}" \
+    --data-dir "${DATA-DIR:-/data}" \
+    --compute-type "${COMPUTE_TYPE:-int8}" \
+    --device "${DEVICE:-cuda}" \
+    --beam-size "${BEAM_SIZE:-5}" \
+    "$@"

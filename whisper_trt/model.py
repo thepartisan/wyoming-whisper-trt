@@ -629,6 +629,14 @@ MODEL_BUILDERS = {
 def load_trt_model(
     name: str, path: Optional[str] = None, build: bool = True, verbose: bool = False
 ) -> WhisperTRT:
+    # print current precision settings
+    logger.debug(
+        "Loading TRT model '%s' with quant_mode=%s, fp16_mode=%s",
+        name,
+        WhisperTRTBuilder.quant_mode,
+        WhisperTRTBuilder.fp16_mode,
+    )
+
     if name not in MODEL_BUILDERS:
         raise RuntimeError(f"Model '{name}' is not supported by WhisperTRT.")
     if path is None:
