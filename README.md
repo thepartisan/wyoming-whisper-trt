@@ -42,6 +42,22 @@ Memory consumption to transcribe 20 seconds of speech on Jetson Orin Nano. See [
 
 NOTE: ARM64 dGPU and iGPU containers may take a while to start on first launch after installation or updates. I do not have ARM64 or Jetson devices so several packages such as torch and torch2trt fail to install properly because CUDA is not detected when using QEMU/buildx. If you know how to get around this please reach out to me.
 
+### Supported Models
+#### Multilingual
+- tiny
+- base
+- small
+- medium
+- large
+- large-v2
+- large-v3
+- large-v3-turbo
+
+#### English only
+- tiny.en
+- base.en
+- small.en
+
 ### Pre-requisites:
 1. Install and configure Docker
 2. Install and configure the [Nvidia Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
@@ -56,6 +72,15 @@ services:
     ports:
       - 10300:10300
     restart: unless-stopped
+    environment:
+      MODEL:      "${MODEL:-base}"
+      LANGUAGE:   "${LANGUAGE:-auto}"
+      URI:        "${URI:-tcp://0.0.0.0:10300}"
+      DATA_DIR:   "${DATA_DIR:-/data}"
+      COMPUTE_TYPE: "${COMPUTE_TYPE:-int8}"
+      DEVICE:     "${DEVICE:-cuda}"
+      BEAM_SIZE:  "${BEAM_SIZE:-5}"
+      DEBUG:      "${DEBUG:-false}"
     deploy:
       resources:
         reservations:
@@ -74,6 +99,15 @@ services:
     ports:
       - 10300:10300
     restart: unless-stopped
+    environment:
+      MODEL:      "${MODEL:-base}"
+      LANGUAGE:   "${LANGUAGE:-auto}"
+      URI:        "${URI:-tcp://0.0.0.0:10300}"
+      DATA_DIR:   "${DATA_DIR:-/data}"
+      COMPUTE_TYPE: "${COMPUTE_TYPE:-int8}"
+      DEVICE:     "${DEVICE:-cuda}"
+      BEAM_SIZE:  "${BEAM_SIZE:-5}"
+      DEBUG:      "${DEBUG:-false}"
     deploy:
       resources:
         reservations:
@@ -90,6 +124,15 @@ services:
     image: captnspdr/wyoming-whisper-trt:latest-igpu
     container_name: wyoming-whisper-trt
     restart: unless-stopped
+    environment:
+      MODEL:      "${MODEL:-base}"
+      LANGUAGE:   "${LANGUAGE:-auto}"
+      URI:        "${URI:-tcp://0.0.0.0:10300}"
+      DATA_DIR:   "${DATA_DIR:-/data}"
+      COMPUTE_TYPE: "${COMPUTE_TYPE:-int8}"
+      DEVICE:     "${DEVICE:-cuda}"
+      BEAM_SIZE:  "${BEAM_SIZE:-5}"
+      DEBUG:      "${DEBUG:-false}"
     network_mode: host
     runtime: nvidia
     environment:
