@@ -6,11 +6,15 @@ Main entry point for the Whisper TRT server.
 This script initializes the Whisper TRT model, sets up the server, and handles client events.
 """
 
+# SDPA fix for Whisper 20240930 and newer per https://github.com/openai/whisper/discussions/2423
+from whisper.model import disable_sdpa
+
 import argparse
 import asyncio
 import logging
 import sys
 import time
+import os
 from functools import partial
 from pathlib import Path
 from typing import Optional, List
@@ -23,7 +27,7 @@ from .handler import WhisperTrtEventHandler
 from whisper_trt.cache import get_cache_dir, make_cache_dir
 from whisper_trt.utils import check_file_md5, download_file
 
-from whisper_trt import load_trt_model, WhisperTRT
+from whisper_trt import load_trt_model, WhisperTRT, MODEL_FILENAMES
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -230,9 +234,9 @@ async def main() -> None:
     )
     parser.add_argument(
         "--compute-type",
-        default="default",
-        choices=["default", "float16", "int8"],
-        help="Compute type (float16, int8, etc.)",
+        default="int8",
+        choices=["float16", "int8"],
+        help="Compute type (float16, int8)",
     )
     parser.add_argument(
         "--beam-size",
@@ -299,8 +303,12 @@ async def main() -> None:
     # Load Whisper TRT model
     try:
         logger.info(f"Loading Whisper TRT model '{model_name}'...")
+        model_path = os.path.join(args.download_dir, MODEL_FILENAMES[args.model])
         trt_model = load_trt_model(
-            model_name, path=str(download_path / f"{model_name}.pth"), build=True
+            args.model,
+            path=model_path,
+            build=True,
+            verbose=args.debug,
         )
         logger.info(f"Whisper TRT model '{model_name}' loaded successfully.")
     except Exception as e:
@@ -350,4 +358,6 @@ def run() -> None:
 
 
 if __name__ == "__main__":
-    run()
+    # SDPA fix for Whisper 20240930 and newer per https://github.com/openai/whisper/discussions/2423
+    with disable_sdpa():
+        run()

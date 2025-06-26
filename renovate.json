@@ -1,14 +1,20 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended"
-  ],
+  "extends": ["config:recommended"],
   "assignees": ["JonahMMay"],
   "labels": ["renovate"],
   "packageRules": [
-  {
-    "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
-    "automerge": true
-  }
- ]
+    {
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "automerge": true
+    },
+    {
+      "groupName": "tensorrt",
+      "matchPackagePatterns": [
+        "^tensorrt$",
+        "^tensorrt_cu12_bindings$",
+        "^tensorrt_cu12_libs$"
+      ]
+    }
+  ]
 }

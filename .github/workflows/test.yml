@@ -41,7 +41,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@5db1cf9a59fb97c40a68accab29236f0da7e94db
         with:
-          python-version: '3.12'  # Use a stable version
+          python-version: '3.13'  # Use a stable version
 
       - name: Install Python venv
         shell: bash
@@ -141,3 +141,18 @@ jobs:
           name: server-logs
           path: server.log
         if: always()  # This ensures the step runs even if previous steps fail
+        
+      # 9. CUDA driver/library mismatch auto-fix (only on failure)
+      - name: CUDA Driver/Library Mismatch Auto-Fix
+        if: ${{ failure() }}
+        shell: bash
+        run: |
+          echo "Scanning server.log for NVML initialization failure..."
+          if grep -Fq "Failed to initialize NVML: Driver/library version mismatch" server.log; then
+            echo "CUDA driver/library version mismatch detected—upgrading system and rebooting."
+            sudo apt update
+            sudo apt upgrade -y
+            sudo reboot
+          else
+            echo "No NVML mismatch found; skipping auto-fix."
+          fi
