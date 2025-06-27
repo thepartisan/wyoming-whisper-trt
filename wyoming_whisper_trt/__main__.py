@@ -24,8 +24,6 @@ from wyoming.server import AsyncServer
 
 from . import __version__
 from .handler import WhisperTrtEventHandler
-from whisper_trt.cache import get_cache_dir, make_cache_dir
-from whisper_trt.utils import check_file_md5, download_file
 
 from whisper_trt import load_trt_model, WhisperTRT, MODEL_FILENAMES, WhisperTRTBuilder
 
@@ -155,6 +153,7 @@ def build_wyoming_info(model_name: str, languages: List[str]) -> Info:
                 ),
                 installed=True,
                 version=__version__,
+                supports_transcript_streaming=True,
                 models=[
                     AsrModel(
                         name=model_name,
@@ -187,20 +186,19 @@ async def run_server(uri: str, handler_factory_func, *args, **kwargs) -> None:
         *args: Variable length argument list.
         **kwargs: Arbitrary keyword arguments.
     """
-    try:
-        server = AsyncServer.from_uri(uri)
-        logger.info(f"Server initialized and listening on {uri}.")
-    except Exception as e:
-        logger.error(f"Failed to initialize server with URI '{uri}': {e}")
-        raise
+    # Create the wyoming server (e.g. AsyncTcpServer)
+    server = AsyncServer.from_uri(uri)
+    logger.info(f"Server initialized and listening on {uri}.")
+
     try:
         await server.run(handler_factory_func, *args, **kwargs)
     except Exception as e:
         logger.error(f"Server encountered an error: {e}")
         raise
     finally:
-        await server.close()
-        logger.info("Server has been shut down.")
+        # Use the stop method to handle event handler shutdown and server closure
+        await server.stop()
+        logger.info("Server and event handlers stopped gracefully.")
 
 
 async def main() -> None:
@@ -288,10 +286,10 @@ async def main() -> None:
     # Set compute-type
     if args.compute_type == "int8":
         WhisperTRTBuilder.quant_mode = "int8"
-        WhisperTRTBuilder.fp16_mode  = False
+        WhisperTRTBuilder.fp16_mode = False
     elif args.compute_type == "float16":
         WhisperTRTBuilder.quant_mode = "fp16"
-        WhisperTRTBuilder.fp16_mode  = True
+        WhisperTRTBuilder.fp16_mode = True
 
     # Set download directory to first data directory if not specified
     if not args.download_dir:

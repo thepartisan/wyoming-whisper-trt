@@ -19,10 +19,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-
-import argparse
 import os
-import psutil
 import re
 import time
 from typing import Optional, Dict, Any, List
@@ -35,8 +32,8 @@ import torch2trt
 import tensorrt
 
 from whisper import load_model
-from whisper.model import LayerNorm, Linear, Tensor, ModelDimensions, sinusoids, Whisper
-from whisper.tokenizer import Tokenizer, LANGUAGES, TO_LANGUAGE_CODE
+from whisper.model import LayerNorm, Tensor, ModelDimensions
+from whisper.tokenizer import Tokenizer, TO_LANGUAGE_CODE
 import whisper.audio
 from dataclasses import asdict
 
@@ -202,8 +199,11 @@ class WhisperTRT(nn.Module):
 
     @torch.no_grad()
     def transcribe(
-        self, audio: str | np.ndarray, language: str = "auto"
-    ) -> Dict[str, str]:
+        self,
+        audio: str | np.ndarray,
+        language: str = "auto",
+        stream: bool = False,
+    ) -> Dict[str, Any]:
         start_time = time.perf_counter()
         # If audio is a string, load it; if a NumPy array and not floating, convert.
 
@@ -212,6 +212,7 @@ class WhisperTRT(nn.Module):
         elif isinstance(audio, np.ndarray):
             if not np.issubdtype(audio.dtype, np.floating):
                 audio = audio.astype(np.float32) / 32768.0
+
         mel = whisper.audio.log_mel_spectrogram(audio, padding=whisper.audio.N_SAMPLES)[
             None, ...
         ].cuda()
@@ -219,8 +220,12 @@ class WhisperTRT(nn.Module):
             mel = mel[:, :, : whisper.audio.N_FRAMES]
         load_time = time.perf_counter() - start_time
 
+        chunks: List[str] = []
+        max_len = self.dims.n_text_ctx + 1
+
         with torch.cuda.stream(self.stream):
             audio_features = self.embed_audio(mel)
+
             if self.tokenizer is not None:
                 if language.lower() != "auto":
                     lang_code = language.lower()
@@ -233,27 +238,39 @@ class WhisperTRT(nn.Module):
                     logger.debug("Tokenizer set to auto language detection.")
             else:
                 logger.warning("No tokenizer found; transcription may be degraded.")
-            # --- Optimized Decoding Loop (Preallocated) ---
 
-            max_len = self.dims.n_text_ctx + 1
+            # Preallocate
             out_tokens = torch.empty((1, max_len), dtype=torch.long).cuda()
             out_tokens[0, 0] = self.tokenizer.sot
             cur_len = 1
             decode_start = time.perf_counter()
+
             for i in range(1, max_len):
                 current_tokens = out_tokens[:, :cur_len]
                 logits = self.logits(current_tokens, audio_features)
                 next_token = logits.argmax(dim=-1)[:, -1]
                 out_tokens[0, cur_len] = next_token
                 cur_len += 1
+
+                # if streaming mode, decode interim text so far
+                if stream:
+                    interim_tokens = out_tokens[
+                        :, 2:cur_len
+                    ]  # skip <sot> and <notimestamps>
+                    interim_text = self._decode_tokens(interim_tokens)
+                    chunks.append(interim_text)
+
                 if next_token.item() == self.tokenizer.eot:
                     break
-            tokens = out_tokens[:, 2 : cur_len - 1]
-            text = self.tokenizer.decode(list(tokens.flatten().cpu().numpy()))
-            text = re.sub(r"<\|transcribe\|><\|notimestamps\|>", "", text).strip()
+
+            # after loop, build final text
+            final_tokens = out_tokens[:, 2 : cur_len - 1]
+            final_text = self._decode_tokens(final_tokens)
             decode_time = time.perf_counter() - decode_start
+
         self.stream.synchronize()
         total_time = time.perf_counter() - start_time
+
         if self.verbose:
             logger.info(
                 "Audio load & mel: %.1f ms, Decoding: %.1f ms, Total: %.1f ms",
@@ -261,7 +278,11 @@ class WhisperTRT(nn.Module):
                 decode_time * 1000,
                 total_time * 1000,
             )
-        return {"text": text}
+
+        result = {"text": final_text}
+        if stream:
+            result["chunks"] = chunks
+        return result
 
     @torch.no_grad()
     def transcribe_batch(
@@ -341,6 +362,11 @@ class WhisperTRT(nn.Module):
         if self.tokenizer is not None and hasattr(self.tokenizer, "all_language_codes"):
             return list(self.tokenizer.all_language_codes)
         return ["en"]
+
+    def _decode_tokens(self, tokens: torch.Tensor) -> str:
+        """Decode tokens to text, removing special markers."""
+        text = self.tokenizer.decode(list(tokens.flatten().cpu().numpy()))
+        return re.sub(r"<\|transcribe\|><\|notimestamps\|>", "", text).strip()
 
 
 # -----------------------------------------------------------------------------
