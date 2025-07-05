@@ -14,7 +14,7 @@ from wyoming.asr import (
     TranscriptChunk,
     TranscriptStop,
 )
-from wyoming.audio import AudioStart, AudioChunk, AudioStop
+from wyoming.audio import AudioChunk, AudioStop
 from wyoming.event import Event
 from wyoming.info import Describe, Info
 from wyoming.server import AsyncEventHandler
@@ -23,9 +23,6 @@ import whisper_trt
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
-
-# bytes threshold for sliding-window interim decoding (0.25s @16kHz, 16-bit stereo)
-PARTIAL_THRESHOLD = 16000
 
 
 class NanosecondFormatter(logging.Formatter):
@@ -40,7 +37,6 @@ class NanosecondFormatter(logging.Formatter):
         return f"{s}.{int(ct * 1e9) % 1_000_000_000:09d}"
 
 
-# Set up logging
 formatter = NanosecondFormatter("%(asctime)s [%(levelname)s] %(message)s")
 handler = logging.StreamHandler()
 handler.setFormatter(formatter)
@@ -54,10 +50,10 @@ def wav_bytes_to_np_array(wav_bytes: bytes) -> np.ndarray:
     Read a WAV file from an in-memory bytes object and return a NumPy array of samples.
     """
     with wave.open(io.BytesIO(wav_bytes), "rb") as wf:
-        raw = wf.readframes(wf.getnframes())
+        raw_data = wf.readframes(wf.getnframes())
         sw = wf.getsampwidth()
         dtype = {1: np.uint8, 2: np.int16, 4: np.int32}.get(sw)
-        audio = np.frombuffer(raw, dtype=dtype)
+        audio = np.frombuffer(raw_data, dtype=dtype)
         if wf.getnchannels() > 1:
             audio = audio.reshape(-1, wf.getnchannels())
         if not np.issubdtype(audio.dtype, np.floating):
@@ -66,7 +62,7 @@ def wav_bytes_to_np_array(wav_bytes: bytes) -> np.ndarray:
 
 
 class WhisperTrtEventHandler(AsyncEventHandler):
-    """Event handler for clients utilizing the Whisper TRT model with deduped interim chunks."""
+    """Event handler for clients utilizing the Whisper TRT model."""
 
     def __init__(
         self,
@@ -82,7 +78,7 @@ class WhisperTrtEventHandler(AsyncEventHandler):
         default_language: str = "auto",
         **kwargs,
     ) -> None:
-        # remove extra kwargs
+        # remove unused kwargs
         kwargs.pop("model_is_lang_specific", None)
         kwargs.pop("default_language", None)
         super().__init__(reader, writer, *args, **kwargs)
@@ -91,63 +87,43 @@ class WhisperTrtEventHandler(AsyncEventHandler):
         self.wyoming_info_event = wyoming_info.event()
         self.model = model
         self.model_lock = model_lock
-        self._language = getattr(cli_args, "language", None) or default_language
+        self._language = getattr(self.cli_args, "language", None) or default_language
 
-        # state for sliding-window interim
+        # sliding-window threshold (bytes) for interim chunks
+        self._partial_threshold = 16000
         self._pcm_buffer = bytearray()
+
+        # WAV buffer for final flush
         self._wav_buffer = io.BytesIO()
         self._wave_writer: Optional[wave.Wave_write] = None
         self._sample_width: Optional[int] = None
         self._channels: Optional[int] = None
 
-        self._partial_threshold = PARTIAL_THRESHOLD
-        self._last_sent_chunk = 0
+        # interim state
         self._sent_start = False
+        self._last_sent_chunk = 0
         self._last_emitted_text = ""
 
     async def handle_event(self, event: Event) -> bool:
         logger.debug("Received event: %s", event.type)
-        if AudioStart.is_type(event.type):
-            # reset per-utterance state
-            start = AudioStart.from_event(event)
-            logger.debug(
-                "AudioStart: rate=%d, width=%d, channels=%d",
-                start.rate,
-                start.width,
-                start.channels,
-            )
-            self._pcm_buffer.clear()
-            self._wav_buffer = io.BytesIO()
-            self._wave_writer = None
-            self._sample_width = None
-            self._channels = None
-            self._last_sent_chunk = 0
-            self._sent_start = False
-            self._last_emitted_text = ""
-            return True
-
         if AudioChunk.is_type(event.type):
             await self._handle_audio_chunk(event)
             return True
-
         if AudioStop.is_type(event.type):
             await self._handle_audio_stop()
             return False
-
         if Transcribe.is_type(event.type):
             await self._handle_transcribe(event)
             return True
-
         if Describe.is_type(event.type):
             await self._handle_describe()
             return True
-
         return True
 
     async def _handle_audio_chunk(self, event: Event) -> None:
         chunk = AudioChunk.from_event(event)
 
-        # init WAV writer on first chunk
+        # init WAV writer if needed
         if self._wave_writer is None:
             self._wav_buffer = io.BytesIO()
             self._wave_writer = wave.open(self._wav_buffer, "wb")
@@ -160,7 +136,7 @@ class WhisperTrtEventHandler(AsyncEventHandler):
                 "Initialized WAV buffer; threshold %d bytes", self._partial_threshold
             )
 
-        # accumulate raw PCM
+        # accumulate audio
         self._wave_writer.writeframes(chunk.audio)
         self._pcm_buffer.extend(chunk.audio)
 
@@ -170,17 +146,14 @@ class WhisperTrtEventHandler(AsyncEventHandler):
             logger.debug("➡️ Emitted TranscriptStart")
             self._sent_start = True
 
-        # sliding window
+        # sliding-window interim decoding
         window = self._partial_threshold
         hop = window // 2
-
-        # trim if too large
         max_buf = window * 10
         if len(self._pcm_buffer) > max_buf:
             del self._pcm_buffer[: len(self._pcm_buffer) - window * 2]
             logger.debug("Trimmed PCM buffer to %d bytes", len(self._pcm_buffer))
 
-        # process windows
         while len(self._pcm_buffer) >= window:
             raw = self._pcm_buffer[:window]
             dtype = {1: np.uint8, 2: np.int16, 4: np.int32}[self._sample_width]
@@ -190,7 +163,6 @@ class WhisperTrtEventHandler(AsyncEventHandler):
             if pcm.dtype != np.float32:
                 pcm = pcm.astype(np.float32) / float(2 ** (8 * self._sample_width - 1))
 
-            # transcribe
             loop = asyncio.get_event_loop()
             async with self.model_lock:
                 result = await loop.run_in_executor(
@@ -200,7 +172,6 @@ class WhisperTrtEventHandler(AsyncEventHandler):
                     ),
                 )
 
-            # dedupe and emit only new, non-empty chunks
             for text in result.get("chunks", [])[self._last_sent_chunk :]:
                 clean = text.strip()
                 if clean and clean != self._last_emitted_text:
@@ -209,40 +180,50 @@ class WhisperTrtEventHandler(AsyncEventHandler):
                     self._last_emitted_text = clean
             self._last_sent_chunk = len(result.get("chunks", []))
 
-            # slide
             del self._pcm_buffer[:hop]
 
     async def _handle_audio_stop(self) -> None:
-        logger.debug("AudioStop received; flushing final transcript")
-        if self._wave_writer:
+        """Handles AudioStop by emitting just a single final transcript."""
+        if self._wave_writer is None:
+            logger.warning("AudioStop received but no audio was recorded.")
+            return
+
+        # finalize WAV buffer
+        try:
             self._wave_writer.close()
+            logger.debug("Finalized in-memory WAV buffer.")
+        except wave.Error as e:
+            logger.error("Failed to finalize WAV buffer: %s", e)
+            raise
+        finally:
             self._wave_writer = None
 
-        # final flush
+        # run one non-streaming transcription for final text
         wav_bytes = self._wav_buffer.getvalue()
         audio_np = wav_bytes_to_np_array(wav_bytes)
         loop = asyncio.get_event_loop()
         async with self.model_lock:
-            result = await loop.run_in_executor(
-                None,
-                lambda: self.model.transcribe(audio_np, self._language, stream=True),
-            )
+            try:
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: self.model.transcribe(
+                        audio_np, self._language, stream=False
+                    ),
+                )
+                final_text = result.get("text", "").strip()
+                logger.debug("➡️ Emitting final Transcript: %r", final_text)
+                await self.write_event(Transcript(text=final_text).event())
+            except Exception as e:
+                logger.error("Final transcription failed: %s", e, exc_info=True)
+                await self.write_event(
+                    Transcript(text=f"Transcription failed: {str(e)[:100]}").event()
+                )
 
-        # emit any remaining interim
-        for text in result.get("chunks", []):
-            clean = text.strip()
-            if clean and clean != self._last_emitted_text:
-                await self.write_event(TranscriptChunk(text=clean).event())
-                logger.debug("➡️ Final interim: %r", clean)
-                self._last_emitted_text = clean
-
-        # final transcript
-        final_text = result.get("text", "").strip()
-        await self.write_event(Transcript(text=final_text).event())
-        logger.debug("➡️ Emitting final Transcript: %r", final_text)
+        # emit TranscriptStop
         await self.write_event(TranscriptStop().event())
 
-        # reset
+        # reset state for next utterance
+        self._pcm_buffer.clear()
         self._sent_start = False
         self._last_sent_chunk = 0
         self._last_emitted_text = ""
