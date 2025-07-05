@@ -80,6 +80,7 @@ services:
       COMPUTE_TYPE: "${COMPUTE_TYPE:-int8}"
       DEVICE:     "${DEVICE:-cuda}"
       BEAM_SIZE:  "${BEAM_SIZE:-5}"
+      STREAMING:  "${STREAMING:-false}"
       DEBUG:      "${DEBUG:-false}"
     deploy:
       resources:
@@ -107,6 +108,7 @@ services:
       COMPUTE_TYPE: "${COMPUTE_TYPE:-int8}"
       DEVICE:     "${DEVICE:-cuda}"
       BEAM_SIZE:  "${BEAM_SIZE:-5}"
+      STREAMING:  "${STREAMING:-false}"
       DEBUG:      "${DEBUG:-false}"
     deploy:
       resources:
@@ -132,6 +134,7 @@ services:
       COMPUTE_TYPE: "${COMPUTE_TYPE:-int8}"
       DEVICE:     "${DEVICE:-cuda}"
       BEAM_SIZE:  "${BEAM_SIZE:-5}"
+      STREAMING:  "${STREAMING:-false}"
       DEBUG:      "${DEBUG:-false}"
     network_mode: host
     runtime: nvidia
