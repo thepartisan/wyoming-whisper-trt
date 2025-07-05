@@ -377,7 +377,8 @@ class WhisperTRT(nn.Module):
         text = self.tokenizer.decode(list(tokens.flatten().cpu().numpy()))
         # strip any special markers, including end-of-text
         return (
-            text.replace("<|transcribe|><|notimestamps|>", "")
+            text.replace("<|transcribe|>", "")
+            .replace("<|notimestamps|>", "")
             .replace("<|endoftext|>", "")
             .strip()
         )
