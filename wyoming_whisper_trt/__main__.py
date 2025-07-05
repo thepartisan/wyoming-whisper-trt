@@ -232,9 +232,9 @@ async def main() -> None:
     )
     parser.add_argument(
         "--compute-type",
-        default="int8",
-        choices=["float16", "int8"],
-        help="Compute type (float16, int8)",
+        default="float16",
+        choices=["float32", "float16"],
+        help="Compute type (float32, float16)",
     )
     parser.add_argument(
         "--beam-size",
@@ -248,11 +248,15 @@ async def main() -> None:
         help="Optional text to provide as a prompt for the first window",
     )
     parser.add_argument(
+        "--streaming",
+        action="store_true",
+        help="Enable partial transcription streaming",
+    )
+    parser.add_argument(
         "--debug",
         action="store_true",
         help="Enable DEBUG level logging",
     )
-
     parser.add_argument(
         "--version",
         action="version",
@@ -279,17 +283,8 @@ async def main() -> None:
     # Normalize model name
     model_name = normalize_model_name(args.model)
 
-    # Determine if the model is language-specific
-    model_is_lang_specific = is_language_specific(model_name)
-    logger.debug(f"Model '{model_name}' is language-specific: {model_is_lang_specific}")
-
     # Set compute-type
-    if args.compute_type == "int8":
-        WhisperTRTBuilder.quant_mode = "int8"
-        WhisperTRTBuilder.fp16_mode = False
-    elif args.compute_type == "float16":
-        WhisperTRTBuilder.quant_mode = "fp16"
-        WhisperTRTBuilder.fp16_mode = True
+    WhisperTRTBuilder.fp16_mode = args.compute_type == "float16"
 
     # Set download directory to first data directory if not specified
     if not args.download_dir:
@@ -309,7 +304,7 @@ async def main() -> None:
     # Load Whisper TRT model
     try:
         logger.info(f"Loading Whisper TRT model '{model_name}'...")
-        model_path = os.path.join(args.download_dir, MODEL_FILENAMES[args.model])
+        model_path = os.path.join(args.download_dir, MODEL_FILENAMES[model_name])
         trt_model = load_trt_model(
             args.model,
             path=model_path,
@@ -339,7 +334,7 @@ async def main() -> None:
         model=trt_model,
         model_lock=model_lock,
         initial_prompt=args.initial_prompt,
-        model_is_lang_specific=model_is_lang_specific,
+        streaming=args.streaming,
         default_language=args.language,  # Pass the user-selected language
     )
 

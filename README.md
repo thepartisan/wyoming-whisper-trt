@@ -77,9 +77,10 @@ services:
       LANGUAGE:   "${LANGUAGE:-auto}"
       URI:        "${URI:-tcp://0.0.0.0:10300}"
       DATA_DIR:   "${DATA_DIR:-/data}"
-      COMPUTE_TYPE: "${COMPUTE_TYPE:-int8}"
+      COMPUTE_TYPE: "${COMPUTE_TYPE:-float16}"
       DEVICE:     "${DEVICE:-cuda}"
       BEAM_SIZE:  "${BEAM_SIZE:-5}"
+      STREAMING:  "${STREAMING:-false}"
       DEBUG:      "${DEBUG:-false}"
     deploy:
       resources:
@@ -104,9 +105,10 @@ services:
       LANGUAGE:   "${LANGUAGE:-auto}"
       URI:        "${URI:-tcp://0.0.0.0:10300}"
       DATA_DIR:   "${DATA_DIR:-/data}"
-      COMPUTE_TYPE: "${COMPUTE_TYPE:-int8}"
+      COMPUTE_TYPE: "${COMPUTE_TYPE:-float16}"
       DEVICE:     "${DEVICE:-cuda}"
       BEAM_SIZE:  "${BEAM_SIZE:-5}"
+      STREAMING:  "${STREAMING:-false}"
       DEBUG:      "${DEBUG:-false}"
     deploy:
       resources:
@@ -129,9 +131,10 @@ services:
       LANGUAGE:   "${LANGUAGE:-auto}"
       URI:        "${URI:-tcp://0.0.0.0:10300}"
       DATA_DIR:   "${DATA_DIR:-/data}"
-      COMPUTE_TYPE: "${COMPUTE_TYPE:-int8}"
+      COMPUTE_TYPE: "${COMPUTE_TYPE:-float16}"
       DEVICE:     "${DEVICE:-cuda}"
       BEAM_SIZE:  "${BEAM_SIZE:-5}"
+      STREAMING:  "${STREAMING:-false}"
       DEBUG:      "${DEBUG:-false}"
     network_mode: host
     runtime: nvidia
@@ -156,7 +159,7 @@ docker run \
   -p 10300:10300 \                            # map port 10300 → 10300
   -e MODEL=base \                             # which model to load (tiny, small, base, etc.)
   -e LANGUAGE=auto \                          # default transcription language (`auto` = detect)
-  -e COMPUTE_TYPE=int8 \                      # `int8` (fast) or `float16`
+  -e COMPUTE_TYPE=float16 \                   # float16 or float32
   -e DEVICE=cuda \                            # `cuda` or `cpu`
   captnspdr/wyoming-whisper-trt:latest-amd64
 ```
@@ -171,7 +174,7 @@ docker run \
   -p 10300:10300 \                            # map port 10300 → 10300
   -e MODEL=base \                             # which model to load (tiny, small, base, etc.)
   -e LANGUAGE=auto \                          # default transcription language (`auto` = detect)
-  -e COMPUTE_TYPE=int8 \                      # `int8` (fast) or `float16`
+  -e COMPUTE_TYPE=float16 \                   # float16 or float32
   -e DEVICE=cuda \                            # `cuda` or `cpu`
   captnspdr/wyoming-whisper-trt:latest-arm64
 ```
@@ -186,7 +189,7 @@ docker run \
   -p 10300:10300 \                            # map port 10300 → 10300
   -e MODEL=base \                             # which model to load (tiny, small, base, etc.)
   -e LANGUAGE=auto \                          # default transcription language (`auto` = detect)
-  -e COMPUTE_TYPE=int8 \                      # `int8` (fast) or `float16`
+  -e COMPUTE_TYPE=float16 \                   # float16 or float32
   -e DEVICE=cuda \                            # `cuda` or `cpu`
   captnspdr/wyoming-whisper-trt:latest-igpu
 ```
