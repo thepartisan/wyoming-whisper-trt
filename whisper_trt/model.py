@@ -184,8 +184,6 @@ class WhisperTRT(nn.Module):
         self.tokenizer = tokenizer
         self.verbose = verbose
         self.stream = torch.cuda.Stream()
-        # Do not enable TorchScript here.
-        # self.forward = torch.jit.script(self.forward)
 
     def embed_audio(self, mel: Tensor) -> Tensor:
         return self.encoder(mel)
@@ -290,6 +288,9 @@ class WhisperTRT(nn.Module):
                 decode_time * 1000,
                 total_time * 1000,
             )
+
+        # optional cache cleanup
+        torch.cuda.empty_cache()
 
         result: Dict[str, Any] = {"text": final_text}
         if stream:
@@ -597,7 +598,10 @@ MODEL_BUILDERS = {
 
 
 def load_trt_model(
-    name: str, path: Optional[str] = None, build: bool = True, verbose: bool = False
+    name: str,
+    path: Optional[str] = None,
+    build: bool = True,
+    verbose: bool = False,
 ) -> WhisperTRT:
     # print current precision settings
     logger.debug(
@@ -608,15 +612,25 @@ def load_trt_model(
 
     if name not in MODEL_BUILDERS:
         raise RuntimeError(f"Model '{name}' is not supported by WhisperTRT.")
+
+    # determine on-disk path
     if path is None:
         path = os.path.join(get_cache_dir(), MODEL_FILENAMES[name])
         make_cache_dir()
+
     builder = MODEL_BUILDERS[name]
     if not os.path.exists(path):
         if not build:
             raise RuntimeError(
                 f"No model found at {path}. Please call load_trt_model with build=True."
             )
-        else:
-            builder.build(path, verbose=verbose)
-    return builder.load(path)
+        builder.build(path, verbose=verbose)
+
+    # load the TRT model (already .cuda().eval() inside)
+    trt_model = builder.load(path)
+
+    # 1) Warm up with one very short silent buffer to clear cache
+    silence = np.zeros((whisper.audio.N_SAMPLES,), dtype=np.float32)
+    _ = trt_model.transcribe(silence, language="auto", stream=False)
+
+    return trt_model
