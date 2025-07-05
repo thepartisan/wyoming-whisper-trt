@@ -233,8 +233,8 @@ async def main() -> None:
     parser.add_argument(
         "--compute-type",
         default="float16",
-        choices=["default", "float16"],
-        help="Compute type (default, float16)",
+        choices=["float32", "float16"],
+        help="Compute type (float32, float16)",
     )
     parser.add_argument(
         "--beam-size",
@@ -283,15 +283,8 @@ async def main() -> None:
     # Normalize model name
     model_name = normalize_model_name(args.model)
 
-    # Determine if the model is language-specific
-    model_is_lang_specific = is_language_specific(model_name)
-    logger.debug(f"Model '{model_name}' is language-specific: {model_is_lang_specific}")
-
     # Set compute-type
-    if args.compute_type == "float16":
-        WhisperTRTBuilder.fp16_mode = True
-    else:
-        WhisperTRTBuilder.fp16_mode = False
+    WhisperTRTBuilder.fp16_mode = args.compute_type == "float16"
 
     # Set download directory to first data directory if not specified
     if not args.download_dir:

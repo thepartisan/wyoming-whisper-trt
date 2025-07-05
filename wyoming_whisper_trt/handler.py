@@ -16,6 +16,7 @@ from wyoming.asr import (
 )
 from wyoming.audio import AudioChunk, AudioStop
 from wyoming.event import Event
+from wyoming.error import Error
 from wyoming.info import Describe, Info
 from wyoming.server import AsyncEventHandler
 
@@ -107,19 +108,24 @@ class WhisperTrtEventHandler(AsyncEventHandler):
 
     async def handle_event(self, event: Event) -> bool:
         logger.debug("Received event: %s", event.type)
-        if AudioChunk.is_type(event.type):
-            await self._handle_audio_chunk(event)
-            return True
-        if AudioStop.is_type(event.type):
-            await self._handle_audio_stop()
-            return False
-        if Transcribe.is_type(event.type):
-            await self._handle_transcribe(event)
-            return True
         if Describe.is_type(event.type):
             await self._handle_describe()
             return True
-        return True
+        try:
+            if AudioChunk.is_type(event.type):
+                await self._handle_audio_chunk(event)
+                return True
+            if AudioStop.is_type(event.type):
+                await self._handle_audio_stop()
+                return False
+            if Transcribe.is_type(event.type):
+                await self._handle_transcribe(event)
+                return True
+        except Exception as err:
+            await self.write_event(
+                Error(text=str(err), code=err.__class__.__name__).event()
+            )
+            raise err
 
     async def _handle_audio_chunk(self, event: Event) -> None:
         chunk = AudioChunk.from_event(event)
