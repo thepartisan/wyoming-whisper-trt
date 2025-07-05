@@ -232,7 +232,7 @@ async def main() -> None:
     )
     parser.add_argument(
         "--compute-type",
-        default="int8",
+        default="float16",
         choices=["default", "float16"],
         help="Compute type (default, float16)",
     )
@@ -248,11 +248,15 @@ async def main() -> None:
         help="Optional text to provide as a prompt for the first window",
     )
     parser.add_argument(
+        "--streaming",
+        action="store_true",
+        help="Enable partial transcription streaming",
+    )
+    parser.add_argument(
         "--debug",
         action="store_true",
         help="Enable DEBUG level logging",
     )
-
     parser.add_argument(
         "--version",
         action="version",
@@ -307,7 +311,7 @@ async def main() -> None:
     # Load Whisper TRT model
     try:
         logger.info(f"Loading Whisper TRT model '{model_name}'...")
-        model_path = os.path.join(args.download_dir, MODEL_FILENAMES[args.model])
+        model_path = os.path.join(args.download_dir, MODEL_FILENAMES[model_name])
         trt_model = load_trt_model(
             args.model,
             path=model_path,
@@ -337,7 +341,7 @@ async def main() -> None:
         model=trt_model,
         model_lock=model_lock,
         initial_prompt=args.initial_prompt,
-        model_is_lang_specific=model_is_lang_specific,
+        streaming=args.streaming,
         default_language=args.language,  # Pass the user-selected language
     )
 

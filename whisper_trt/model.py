@@ -20,7 +20,6 @@
 # DEALINGS IN THE SOFTWARE.
 
 import os
-import re
 import time
 from typing import Optional, Dict, Any, List
 
@@ -203,16 +202,21 @@ class WhisperTRT(nn.Module):
         audio: str | np.ndarray,
         language: str = "auto",
         stream: bool = False,
+        initial_prompt: Optional[str] = None,
     ) -> Dict[str, Any]:
+        """
+        Transcribe audio with optional streaming and an initial prompt.
+        """
         start_time = time.perf_counter()
-        # If audio is a string, load it; if a NumPy array and not floating, convert.
-
+        # Load or normalize audio
         if isinstance(audio, str):
             audio = whisper.audio.load_audio(audio)
-        elif isinstance(audio, np.ndarray):
+        else:
+            audio = np.asarray(audio)
             if not np.issubdtype(audio.dtype, np.floating):
                 audio = audio.astype(np.float32) / 32768.0
 
+        # Mel spectrogram
         mel = whisper.audio.log_mel_spectrogram(audio, padding=whisper.audio.N_SAMPLES)[
             None, ...
         ].cuda()
@@ -226,141 +230,71 @@ class WhisperTRT(nn.Module):
         with torch.cuda.stream(self.stream):
             audio_features = self.embed_audio(mel)
 
-            if self.tokenizer is not None:
+            # Language -> tokenizer
+            if self.tokenizer:
                 if language.lower() != "auto":
-                    lang_code = language.lower()
-                    if lang_code in TO_LANGUAGE_CODE:
-                        lang_code = TO_LANGUAGE_CODE[lang_code]
-                    self.tokenizer.language = lang_code
-                    logger.debug("Tokenizer language set to: %s", lang_code)
+                    code = language.lower()
+                    if code in TO_LANGUAGE_CODE:
+                        code = TO_LANGUAGE_CODE[code]
+                    self.tokenizer.language = code
+                    logger.debug("Tokenizer language set to: %s", code)
                 else:
                     self.tokenizer.language = None
                     logger.debug("Tokenizer set to auto language detection.")
-            else:
-                logger.warning("No tokenizer found; transcription may be degraded.")
 
-            # Preallocate
-            out_tokens = torch.empty((1, max_len), dtype=torch.long).cuda()
+            # Prepare output token buffer
+            out_tokens = torch.empty(
+                (1, max_len), dtype=torch.long, device=audio_features.device
+            )
+            pad_id = getattr(self.tokenizer, "pad", 0)
+            out_tokens.fill_(pad_id)
             out_tokens[0, 0] = self.tokenizer.sot
             cur_len = 1
-            decode_start = time.perf_counter()
 
-            for i in range(1, max_len):
-                current_tokens = out_tokens[:, :cur_len]
-                logits = self.logits(current_tokens, audio_features)
-                next_token = logits.argmax(dim=-1)[:, -1]
+            # Inject initial prompt tokens
+            if initial_prompt:
+                prompt_ids = self.tokenizer.encode(initial_prompt)
+                n = len(prompt_ids)
+                out_tokens[0, cur_len : cur_len + n] = torch.tensor(
+                    prompt_ids, device=audio_features.device
+                )
+                cur_len += n
+
+            decode_start = time.perf_counter()
+            # Decoding loop
+            for _ in range(cur_len, max_len):
+                logits = self.logits(out_tokens[:, :cur_len], audio_features)
+                next_token = logits.argmax(dim=-1)[0, -1]
                 out_tokens[0, cur_len] = next_token
                 cur_len += 1
 
-                # if streaming mode, decode interim text so far
                 if stream:
-                    interim_tokens = out_tokens[
-                        :, 2:cur_len
-                    ]  # skip <sot> and <notimestamps>
-                    interim_text = self._decode_tokens(interim_tokens)
-                    chunks.append(interim_text)
+                    interim = out_tokens[:, 2:cur_len]
+                    chunks.append(self._decode_tokens(interim))
 
-                # stop on end‐of‐text before emitting it
                 if next_token.item() == self.tokenizer.eot:
                     break
 
-                # streaming mode: emit only true interim
-                if stream:
-                    interim_tokens = out_tokens[
-                        :, 2:cur_len
-                    ]  # skip SOT & no-timestamps
-                    interim_text = self._decode_tokens(interim_tokens)
-                    chunks.append(interim_text)
-
-            # after loop, build final text
-            final_tokens = out_tokens[:, 2 : cur_len - 1]
-            final_text = self._decode_tokens(final_tokens)
+            # Final text
+            final_ids = out_tokens[:, 2 : cur_len - 1]
+            final_text = self._decode_tokens(final_ids)
             decode_time = time.perf_counter() - decode_start
 
+        # Synchronize and log
         self.stream.synchronize()
         total_time = time.perf_counter() - start_time
-
         if self.verbose:
             logger.info(
-                "Audio load & mel: %.1f ms, Decoding: %.1f ms, Total: %.1f ms",
+                "Load & mel: %.1f ms, Decode: %.1f ms, Total: %.1f ms",
                 load_time * 1000,
                 decode_time * 1000,
                 total_time * 1000,
             )
 
-        result = {"text": final_text}
+        result: Dict[str, Any] = {"text": final_text}
         if stream:
             result["chunks"] = chunks
         return result
-
-    @torch.no_grad()
-    def transcribe_batch(
-        self, audios: List[str | np.ndarray], language: str = "auto"
-    ) -> List[Dict[str, str]]:
-        start_time = time.perf_counter()
-        mel_list = []
-        for audio in audios:
-            if isinstance(audio, str):
-                audio = whisper.audio.load_audio(audio)
-            elif isinstance(audio, np.ndarray):
-                if not np.issubdtype(audio.dtype, np.floating):
-                    audio = audio.astype(np.float32) / 32768.0
-            audio_tensor = torch.tensor(audio, device="cpu").pin_memory()
-            mel = whisper.audio.log_mel_spectrogram(
-                audio_tensor.numpy(), padding=whisper.audio.N_SAMPLES
-            )
-            if mel.shape[1] > whisper.audio.N_FRAMES:
-                mel = mel[:, : whisper.audio.N_FRAMES]
-            mel_list.append(mel)
-        mel_batch = np.stack(mel_list, axis=0)
-        mel_batch = torch.tensor(mel_batch).cuda()
-        load_time = time.perf_counter() - start_time
-
-        with torch.cuda.stream(self.stream):
-            audio_features = self.embed_audio(mel_batch)
-            if self.tokenizer is not None:
-                if language.lower() != "auto":
-                    lang_code = language.lower()
-                    if lang_code in TO_LANGUAGE_CODE:
-                        lang_code = TO_LANGUAGE_CODE[lang_code]
-                    self.tokenizer.language = lang_code
-                    logger.debug("Tokenizer language set to: %s", lang_code)
-                else:
-                    self.tokenizer.language = None
-                    logger.debug("Tokenizer set to auto language detection.")
-            else:
-                logger.warning("No tokenizer found; transcription may be degraded.")
-            batch_size = mel_batch.shape[0]
-            max_len = self.dims.n_text_ctx + 1
-            out_tokens = torch.empty((batch_size, max_len), dtype=torch.long).cuda()
-            out_tokens[:, 0] = self.tokenizer.sot
-            cur_len = 1
-            decode_start = time.perf_counter()
-            for i in range(1, self.dims.n_text_ctx + 1):
-                current_tokens = out_tokens[:, :cur_len]
-                logits = self.logits(current_tokens, audio_features)
-                next_tokens = logits.argmax(dim=-1)[:, -1]
-                out_tokens[:, cur_len] = next_tokens
-                cur_len += 1
-                if (next_tokens == self.tokenizer.eot).all():
-                    break
-            tokens = out_tokens[:, 2 : cur_len - 1]
-            texts = []
-            for i in range(batch_size):
-                t = self.tokenizer.decode(list(tokens[i].cpu().numpy()))
-                t = re.sub(r"<\|transcribe\|><\|notimestamps\|>", "", t).strip()
-                texts.append({"text": t})
-            decode_time = time.perf_counter() - decode_start
-        self.stream.synchronize()
-        total_time = time.perf_counter() - start_time
-        if self.verbose:
-            logger.info(
-                "Batched load & mel: %.1f ms, Batch decoding: %.1f ms, Total: %.1f ms",
-                load_time * 1000,
-                decode_time * 1000,
-                total_time * 1000,
-            )
-        return texts
 
     @torch.no_grad()
     def get_supported_languages(self) -> List[str]:
