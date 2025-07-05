@@ -260,8 +260,17 @@ class WhisperTRT(nn.Module):
                     interim_text = self._decode_tokens(interim_tokens)
                     chunks.append(interim_text)
 
+                # stop on end‐of‐text before emitting it
                 if next_token.item() == self.tokenizer.eot:
                     break
+
+                # streaming mode: emit only true interim
+                if stream:
+                    interim_tokens = out_tokens[
+                        :, 2:cur_len
+                    ]  # skip SOT & no-timestamps
+                    interim_text = self._decode_tokens(interim_tokens)
+                    chunks.append(interim_text)
 
             # after loop, build final text
             final_tokens = out_tokens[:, 2 : cur_len - 1]
@@ -366,7 +375,12 @@ class WhisperTRT(nn.Module):
     def _decode_tokens(self, tokens: torch.Tensor) -> str:
         """Decode tokens to text, removing special markers."""
         text = self.tokenizer.decode(list(tokens.flatten().cpu().numpy()))
-        return re.sub(r"<\|transcribe\|><\|notimestamps\|>", "", text).strip()
+        # strip any special markers, including end-of-text
+        return (
+            text.replace("<|transcribe|><|notimestamps|>", "")
+            .replace("<|endoftext|>", "")
+            .strip()
+        )
 
 
 # -----------------------------------------------------------------------------
