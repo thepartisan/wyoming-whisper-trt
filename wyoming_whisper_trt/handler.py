@@ -14,7 +14,7 @@ from wyoming.asr import (
     TranscriptChunk,
     TranscriptStop,
 )
-from wyoming.audio import AudioChunk, AudioStop
+from wyoming.audio import AudioChunk, AudioStart, AudioStop
 from wyoming.event import Event
 from wyoming.error import Error
 from wyoming.info import Describe, Info
@@ -114,6 +114,9 @@ class WhisperTrtEventHandler(AsyncEventHandler):
             if Describe.is_type(event.type):
                 await self._handle_describe()
                 return True
+            if AudioStart.is_type(event.type):
+                await self._handle_audio_start()
+                return True
             if AudioChunk.is_type(event.type):
                 await self._handle_audio_chunk(event)
                 return True
@@ -208,6 +211,23 @@ class WhisperTrtEventHandler(AsyncEventHandler):
                             self._last_emitted_text = clean
                     self._last_sent_chunk = len(result.get("chunks", []))
                 del self._pcm_buffer[:hop]
+
+    async def _handle_audio_start(self) -> None:
+        """Reset all buffers/state when a new audio stream begins."""
+        logger.debug("Received AudioStart: resetting buffers/state")
+        # clear out any leftover PCM data
+        self._pcm_buffer.clear()
+
+        # reset WAV writer
+        self._wave_writer = None
+        self._wav_buffer = io.BytesIO()
+        self._sample_width = None
+        self._channels = None
+
+        # reset streaming flags/counters
+        self._sent_start = False
+        self._last_sent_chunk = 0
+        self._last_emitted_text = ""
 
     async def _handle_audio_stop(self) -> None:
         """Handles AudioStop by emitting a final transcript and stopping streaming."""
