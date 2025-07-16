@@ -43,6 +43,9 @@ Memory consumption to transcribe 20 seconds of speech on Jetson Orin Nano. See [
 NOTE: ARM64 dGPU and iGPU containers may take a while to start on first launch after installation or updates. I do not have ARM64 or Jetson devices so several packages such as torch and torch2trt fail to install properly because CUDA is not detected when using QEMU/buildx. If you know how to get around this please reach out to me.
 
 ### Supported Models
+
+NOTE: Only the official OpenAI models from HuggingFace are currently supported. Other variants which have been quantized or modified are not.
+
 #### Multilingual
 - tiny
 - base
