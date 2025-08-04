@@ -5,17 +5,23 @@
   "labels": ["renovate"],
   "packageRules": [
     {
-      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
-      "automerge": true
-    },
-    {
       "groupName": "tensorrt",
+      "automerge": true,
+      "matchUpdateTypes": ["major", "minor", "patch", "pin", "digest"],
       "matchPackagePatterns": [
         "^tensorrt$",
         "^tensorrt_cu12_bindings$",
         "^tensorrt_cu12_libs$"
-      ],
-      "matchUpdateTypes": ["major", "minor", "patch", "pin", "digest"]
+      ]
+    },
+    {
+      "automerge": true,
+      "matchUpdateTypes": ["major", "minor", "patch", "pin", "digest"],
+      "excludePackagePatterns": [
+        "^tensorrt$",
+        "^tensorrt_cu12_bindings$",
+        "^tensorrt_cu12_libs$"
+      ]
     }
   ]
 }
