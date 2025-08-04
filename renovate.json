@@ -8,20 +8,13 @@
       "groupName": "tensorrt",
       "automerge": true,
       "matchUpdateTypes": ["major", "minor", "patch", "pin", "digest"],
-      "matchPackagePatterns": [
-        "^tensorrt$",
-        "^tensorrt_cu12_bindings$",
-        "^tensorrt_cu12_libs$"
+      "matchSourceUrls": [
+        "https://github.com/nvidia/**"
       ]
     },
     {
       "automerge": true,
-      "matchUpdateTypes": ["major", "minor", "patch", "pin", "digest"],
-      "excludePackagePatterns": [
-        "^tensorrt$",
-        "^tensorrt_cu12_bindings$",
-        "^tensorrt_cu12_libs$"
-      ]
+      "matchUpdateTypes": ["major", "minor", "patch", "pin", "digest"]
     }
   ]
 }
