@@ -12,6 +12,7 @@ on:
       - 'examples/**'
       - 'tests/**'
       - '**/*.md'
+      - 'renovate.json'
 
 jobs:
   test_linux:
