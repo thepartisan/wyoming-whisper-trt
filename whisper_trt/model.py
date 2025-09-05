@@ -286,7 +286,6 @@ class WhisperTRT(nn.Module):
                 cur_len += 1
 
             # Inject initial prompt tokens
-
             if initial_prompt:
                 prompt_ids = self.tokenizer.encode(initial_prompt)
                 n = len(prompt_ids)
@@ -294,9 +293,12 @@ class WhisperTRT(nn.Module):
                     prompt_ids, device=audio_features.device
                 )
                 cur_len += n
+            
+            # Prefix length for decoding (SOT + lang/task/notimestamps + initial prompt)
+            prompt_len = cur_len
             decode_start = time.perf_counter()
+            
             # Decoding loop
-
             for _ in range(cur_len, max_len):
                 logits = self.logits(out_tokens[:, :cur_len], audio_features)
                 next_token = logits.argmax(dim=-1)[0, -1]
@@ -304,17 +306,18 @@ class WhisperTRT(nn.Module):
                 cur_len += 1
 
                 if stream:
-                    interim = out_tokens[:, 2:cur_len]
+                    interim = out_tokens[:, prompt_len:cur_len]
                     chunks.append(self._decode_tokens(interim))
                 if next_token.item() == self.tokenizer.eot:
                     break
+                
             # Final text
-
-            final_ids = out_tokens[:, 2 : cur_len - 1]
+            end = cur_len - 1 if out_tokens[0, cur_len - 1].item() == self.tokenizer.eot else cur_len
+            final_ids = out_tokens[:, prompt_len:end]
             final_text = self._decode_tokens(final_ids)
             decode_time = time.perf_counter() - decode_start
+            
         # Synchronize and log
-
         self.stream.synchronize()
         total_time = time.perf_counter() - start_time
         if self.verbose:
@@ -324,8 +327,8 @@ class WhisperTRT(nn.Module):
                 decode_time * 1000,
                 total_time * 1000,
             )
+            
         # optional cache cleanup
-
         torch.cuda.empty_cache()
 
         result: Dict[str, Any] = {"text": final_text}
@@ -659,17 +662,16 @@ def load_trt_model(
     builder = MODEL_BUILDERS[name]
     if not os.path.exists(path):
         if not build:
-            raise RuntimeError(
-                f"No model found at {path}. Please call load_trt_model with build=True."
-            )
+            raise RuntimeError(f"No model found at {path}; pass build=True.")
         builder.build(path, verbose=verbose)
     # load the TRT model (already .cuda().eval() inside)
-
     trt_model = builder.load(path)
 
     # 1) Warm up with one very short silent buffer to clear cache
-
-    silence = np.zeros((whisper.audio.N_SAMPLES,), dtype=np.float32)
-    _ = trt_model.transcribe(silence, language=language, stream=False)
+    try:
+        silence = np.zeros((whisper.audio.N_SAMPLES,), dtype=np.float32)
+        _ = trt_model.transcribe(silence, language=language, stream=False)
+    except Exception as e:
+        logger.debug("Warm-up skipped: %s", e)
 
     return trt_model
