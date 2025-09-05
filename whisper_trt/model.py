@@ -258,8 +258,32 @@ class WhisperTRT(nn.Module):
             )
             pad_id = getattr(self.tokenizer, "pad", 0)
             out_tokens.fill_(pad_id)
-            out_tokens[0, 0] = self.tokenizer.sot
-            cur_len = 1
+            cur_len = 0
+            out_tokens[0, cur_len] = self.tokenizer.sot
+            cur_len += 1
+            # Insert language + task tokens
+            lang_tokens = []
+            if self.tokenizer.language is not None:
+                lang_tokens.extend(
+                    self.tokenizer.encode(
+                        f"<|{self.tokenizer.language}|>", allowed_special="all"
+                    )
+                )
+
+            # Always transcribe, not translate
+            if hasattr(self.tokenizer, "task") and self.tokenizer.task == "transcribe":
+                lang_tokens.extend(
+                    self.tokenizer.encode("<|transcribe|>", allowed_special="all")
+                )
+
+            # Optional: disable timestamps
+            lang_tokens.extend(
+                self.tokenizer.encode("<|notimestamps|>", allowed_special="all")
+            )
+
+            for t in lang_tokens:
+                out_tokens[0, cur_len] = t
+                cur_len += 1
 
             # Inject initial prompt tokens
 
@@ -615,6 +639,7 @@ def load_trt_model(
     path: Optional[str] = None,
     build: bool = True,
     verbose: bool = False,
+    language: str = "auto",
 ) -> WhisperTRT:
     # print current precision settings
 
@@ -645,6 +670,6 @@ def load_trt_model(
     # 1) Warm up with one very short silent buffer to clear cache
 
     silence = np.zeros((whisper.audio.N_SAMPLES,), dtype=np.float32)
-    _ = trt_model.transcribe(silence, language="auto", stream=False)
+    _ = trt_model.transcribe(silence, language=language, stream=False)
 
     return trt_model

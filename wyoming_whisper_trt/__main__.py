@@ -310,6 +310,7 @@ async def main() -> None:
             path=model_path,
             build=True,
             verbose=args.debug,
+            language=args.language,  # This sets builder._language for multilingual models
         )
         logger.info(f"Whisper TRT model '{model_name}' loaded successfully.")
     except Exception as e:
