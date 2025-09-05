@@ -19,6 +19,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+
 import os
 import time
 from typing import Optional, Dict, Any, List
@@ -207,14 +208,15 @@ class WhisperTRT(nn.Module):
         """
         start_time = time.perf_counter()
         # Load or normalize audio
+
         if isinstance(audio, str):
             audio = whisper.audio.load_audio(audio)
         else:
             audio = np.asarray(audio)
             if not np.issubdtype(audio.dtype, np.floating):
                 audio = audio.astype(np.float32) / 32768.0
-
         # Mel spectrogram
+
         mel = whisper.audio.log_mel_spectrogram(audio, padding=whisper.audio.N_SAMPLES)[
             None, ...
         ].cuda()
@@ -229,8 +231,10 @@ class WhisperTRT(nn.Module):
             audio_features = self.embed_audio(mel)
 
             # Language -> tokenizer
+
             if self.tokenizer:
                 # Always force STT (transcribe) mode
+
                 if language.lower() != "auto":
                     code = language.lower()
                     if code in TO_LANGUAGE_CODE:
@@ -241,13 +245,14 @@ class WhisperTRT(nn.Module):
                     self.tokenizer.language = None
                     logger.debug("Tokenizer set to auto language detection.")
                 # Always set task to transcribe
-                if hasattr(self.tokenizer, 'task'):
+
+                if hasattr(self.tokenizer, "task"):
                     self.tokenizer.task = "transcribe"
-                elif hasattr(self.tokenizer, 'set_task'):
+                elif hasattr(self.tokenizer, "set_task"):
                     self.tokenizer.set_task("transcribe")
                 # If task token is injected via prompt, ensure prompt includes <|transcribe|> if needed
-
             # Prepare output token buffer
+
             out_tokens = torch.empty(
                 (1, max_len), dtype=torch.long, device=audio_features.device
             )
@@ -257,6 +262,7 @@ class WhisperTRT(nn.Module):
             cur_len = 1
 
             # Inject initial prompt tokens
+
             if initial_prompt:
                 prompt_ids = self.tokenizer.encode(initial_prompt)
                 n = len(prompt_ids)
@@ -264,9 +270,9 @@ class WhisperTRT(nn.Module):
                     prompt_ids, device=audio_features.device
                 )
                 cur_len += n
-
             decode_start = time.perf_counter()
             # Decoding loop
+
             for _ in range(cur_len, max_len):
                 logits = self.logits(out_tokens[:, :cur_len], audio_features)
                 next_token = logits.argmax(dim=-1)[0, -1]
@@ -276,16 +282,15 @@ class WhisperTRT(nn.Module):
                 if stream:
                     interim = out_tokens[:, 2:cur_len]
                     chunks.append(self._decode_tokens(interim))
-
                 if next_token.item() == self.tokenizer.eot:
                     break
-
             # Final text
+
             final_ids = out_tokens[:, 2 : cur_len - 1]
             final_text = self._decode_tokens(final_ids)
             decode_time = time.perf_counter() - decode_start
-
         # Synchronize and log
+
         self.stream.synchronize()
         total_time = time.perf_counter() - start_time
         if self.verbose:
@@ -295,8 +300,8 @@ class WhisperTRT(nn.Module):
                 decode_time * 1000,
                 total_time * 1000,
             )
-
         # optional cache cleanup
+
         torch.cuda.empty_cache()
 
         result: Dict[str, Any] = {"text": final_text}
@@ -318,6 +323,7 @@ class WhisperTRT(nn.Module):
         """Decode tokens to text, removing special markers."""
         text = self.tokenizer.decode(list(tokens.flatten().cpu().numpy()))
         # strip any special markers, including end-of-text
+
         return (
             text.replace("<|transcribe|>", "")
             .replace("<|notimestamps|>", "")
@@ -611,6 +617,7 @@ def load_trt_model(
     verbose: bool = False,
 ) -> WhisperTRT:
     # print current precision settings
+
     logger.debug(
         "Loading TRT model '%s' with fp16_mode=%s",
         name,
@@ -619,12 +626,11 @@ def load_trt_model(
 
     if name not in MODEL_BUILDERS:
         raise RuntimeError(f"Model '{name}' is not supported by WhisperTRT.")
-
     # determine on-disk path
+
     if path is None:
         path = os.path.join(get_cache_dir(), MODEL_FILENAMES[name])
         make_cache_dir()
-
     builder = MODEL_BUILDERS[name]
     if not os.path.exists(path):
         if not build:
@@ -632,11 +638,12 @@ def load_trt_model(
                 f"No model found at {path}. Please call load_trt_model with build=True."
             )
         builder.build(path, verbose=verbose)
-
     # load the TRT model (already .cuda().eval() inside)
+
     trt_model = builder.load(path)
 
     # 1) Warm up with one very short silent buffer to clear cache
+
     silence = np.zeros((whisper.audio.N_SAMPLES,), dtype=np.float32)
     _ = trt_model.transcribe(silence, language="auto", stream=False)
 
