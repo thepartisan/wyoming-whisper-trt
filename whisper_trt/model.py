@@ -262,6 +262,7 @@ class WhisperTRT(nn.Module):
             out_tokens[0, cur_len] = self.tokenizer.sot
             cur_len += 1
             # Insert language + task tokens
+
             lang_tokens = []
             if self.tokenizer.language is not None:
                 lang_tokens.extend(
@@ -269,14 +270,14 @@ class WhisperTRT(nn.Module):
                         f"<|{self.tokenizer.language}|>", allowed_special="all"
                     )
                 )
-
             # Always transcribe, not translate
+
             if hasattr(self.tokenizer, "task") and self.tokenizer.task == "transcribe":
                 lang_tokens.extend(
                     self.tokenizer.encode("<|transcribe|>", allowed_special="all")
                 )
-
             # Optional: disable timestamps
+
             lang_tokens.extend(
                 self.tokenizer.encode("<|notimestamps|>", allowed_special="all")
             )
@@ -284,8 +285,8 @@ class WhisperTRT(nn.Module):
             for t in lang_tokens:
                 out_tokens[0, cur_len] = t
                 cur_len += 1
-
             # Inject initial prompt tokens
+
             if initial_prompt:
                 prompt_ids = self.tokenizer.encode(initial_prompt)
                 n = len(prompt_ids)
@@ -293,12 +294,13 @@ class WhisperTRT(nn.Module):
                     prompt_ids, device=audio_features.device
                 )
                 cur_len += n
-            
             # Prefix length for decoding (SOT + lang/task/notimestamps + initial prompt)
+
             prompt_len = cur_len
             decode_start = time.perf_counter()
-            
+
             # Decoding loop
+
             for _ in range(cur_len, max_len):
                 logits = self.logits(out_tokens[:, :cur_len], audio_features)
                 next_token = logits.argmax(dim=-1)[0, -1]
@@ -310,14 +312,18 @@ class WhisperTRT(nn.Module):
                     chunks.append(self._decode_tokens(interim))
                 if next_token.item() == self.tokenizer.eot:
                     break
-                
             # Final text
-            end = cur_len - 1 if out_tokens[0, cur_len - 1].item() == self.tokenizer.eot else cur_len
+
+            end = (
+                cur_len - 1
+                if out_tokens[0, cur_len - 1].item() == self.tokenizer.eot
+                else cur_len
+            )
             final_ids = out_tokens[:, prompt_len:end]
             final_text = self._decode_tokens(final_ids)
             decode_time = time.perf_counter() - decode_start
-            
         # Synchronize and log
+
         self.stream.synchronize()
         total_time = time.perf_counter() - start_time
         if self.verbose:
@@ -327,8 +333,8 @@ class WhisperTRT(nn.Module):
                 decode_time * 1000,
                 total_time * 1000,
             )
-            
         # optional cache cleanup
+
         torch.cuda.empty_cache()
 
         result: Dict[str, Any] = {"text": final_text}
@@ -665,13 +671,14 @@ def load_trt_model(
             raise RuntimeError(f"No model found at {path}; pass build=True.")
         builder.build(path, verbose=verbose)
     # load the TRT model (already .cuda().eval() inside)
+
     trt_model = builder.load(path)
 
     # 1) Warm up with one very short silent buffer to clear cache
+
     try:
         silence = np.zeros((whisper.audio.N_SAMPLES,), dtype=np.float32)
         _ = trt_model.transcribe(silence, language=language, stream=False)
     except Exception as e:
         logger.debug("Warm-up skipped: %s", e)
-
     return trt_model
