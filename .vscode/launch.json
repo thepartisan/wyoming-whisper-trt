@@ -1,12 +1,12 @@
-// .vscode/launch.json
 {
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug in WSL",
+      "name": "Debug in venv",
       "type": "debugpy",
       "request": "launch",
       "module": "wyoming_whisper_trt",
+      "python": "${workspaceFolder}/.venv/bin/python",
       "args": [
         "--model", "tiny",
         "--uri", "tcp://0.0.0.0:10300",
