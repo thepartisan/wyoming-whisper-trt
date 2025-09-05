@@ -230,6 +230,7 @@ class WhisperTRT(nn.Module):
 
             # Language -> tokenizer
             if self.tokenizer:
+                # Always force STT (transcribe) mode
                 if language.lower() != "auto":
                     code = language.lower()
                     if code in TO_LANGUAGE_CODE:
@@ -239,6 +240,12 @@ class WhisperTRT(nn.Module):
                 else:
                     self.tokenizer.language = None
                     logger.debug("Tokenizer set to auto language detection.")
+                # Always set task to transcribe
+                if hasattr(self.tokenizer, 'task'):
+                    self.tokenizer.task = "transcribe"
+                elif hasattr(self.tokenizer, 'set_task'):
+                    self.tokenizer.set_task("transcribe")
+                # If task token is injected via prompt, ensure prompt includes <|transcribe|> if needed
 
             # Prepare output token buffer
             out_tokens = torch.empty(
