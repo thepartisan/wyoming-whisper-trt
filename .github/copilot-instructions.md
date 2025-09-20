@@ -36,28 +36,47 @@ Always reference these instructions first and fallback to search or bash command
 
 ### Validation and Testing
 
-1. **Format Code**:
+**IMPORTANT**: All validation scripts require dependencies from `script/setup --dev` to be installed first.
+
+1. **Validate Python Syntax (No Dependencies Required)**:
+   ```bash
+   python -m py_compile wyoming_whisper_trt/__init__.py
+   python -m py_compile wyoming_whisper_trt/__main__.py
+   python -m py_compile wyoming_whisper_trt/handler.py
+   ```
+   - Takes 5-10 seconds. Basic syntax validation without external dependencies.
+
+2. **Format Code**:
    ```bash
    python script/format
    ```
    - Takes 10-30 seconds. Runs black and isort formatters.
+   - **Requires**: Development dependencies installed via `script/setup --dev`
 
-2. **Lint Code**:
+3. **Lint Code**:
    ```bash
    python script/lint
    ```
    - Takes 1-3 minutes. Runs black, isort, flake8, pylint, and mypy.
    - **NEVER CANCEL**: Set timeout to 10+ minutes for large codebases.
+   - **Requires**: Development dependencies installed via `script/setup --dev`
 
-3. **Run Tests**:
+4. **Validate Docker Configuration**:
+   ```bash
+   docker compose config
+   ```
+   - Takes 5-10 seconds. Validates docker-compose.yaml syntax and structure.
+
+5. **Run Tests**:
    ```bash
    python script/test
    ```
    - **NEVER CANCEL**: Takes 10-15 minutes. Set timeout to 30+ minutes.
    - Tests Wyoming Protocol integration and speech recognition functionality.
    - Downloads tiny-int8 model if not present (requires ~200MB download).
+   - **Requires**: Full dependencies installed via `script/setup --dev`
 
-4. **Package for Distribution**:
+6. **Package for Distribution**:
    ```bash
    python script/package
    ```
@@ -85,6 +104,29 @@ Always reference these instructions first and fallback to search or bash command
    - **NEVER CANCEL**: Initial build takes 60-90 minutes. Set timeout to 120+ minutes.
    - Handles all dependencies and CUDA setup automatically.
 
+## Quick Validation (No Dependencies Required)
+
+For immediate code validation without waiting for full dependency installation:
+
+```bash
+# Validate Python syntax
+python -m py_compile wyoming_whisper_trt/*.py
+
+# Check git submodule status
+git submodule status
+
+# Validate Docker configuration
+docker compose config
+
+# Check repository structure
+ls -la script/ wyoming_whisper_trt/ tests/
+
+# Verify version information
+cat wyoming_whisper_trt/VERSION
+```
+
+These commands help verify the codebase integrity before committing to long build processes.
+
 ## Manual Validation Requirements
 
 ### End-to-End Speech Recognition Testing
@@ -102,10 +144,12 @@ Always reference these instructions first and fallback to search or bash command
 
 2. **Test with Sample Audio**:
    ```bash
-   # Use the provided test audio file
+   # Use the provided test audio file (RIFF WAVE, 16-bit, stereo 44100 Hz)
    python examples/transcribe.py base tests/turn_on_the_living_room_lamp.wav
    ```
    - Expected output should contain transcription of "turn on the living room lamp"
+   - Test file: `tests/turn_on_the_living_room_lamp.wav` (527KB, stereo 44.1kHz)
+   - **Requires**: Full dependencies and model downloads (30-45 minutes first run)
 
 3. **Wyoming Protocol Integration Test**:
    ```bash
@@ -133,6 +177,12 @@ Always reference these instructions first and fallback to search or bash command
 **Known Failure Mode**: In restricted network environments, pip install may fail with "Read timed out" errors. In such cases:
 - Use Docker builds which have better network handling
 - Use pre-built container images: `captnspdr/wyoming-whisper-trt:latest-amd64`
+- Documentation note: Full build validation was limited in restricted environments due to PyPI connectivity issues
+
+**Network Timeout Errors**: If you see `pip._vendor.urllib3.exceptions.ReadTimeoutError: HTTPSConnectionPool`, this indicates network restrictions. The build process requires:
+- Stable internet connection with high bandwidth
+- Access to multiple package repositories simultaneously
+- No firewall restrictions on HTTPS traffic to package indexes
 
 ## GPU and CUDA Requirements
 
@@ -143,11 +193,20 @@ Always reference these instructions first and fallback to search or bash command
 
 ## CI/CD Integration
 
+**Prerequisite**: Always run `script/setup --dev` first to install development dependencies.
+
 Always run before committing:
 ```bash
-python script/format  # Auto-format code
+# Quick syntax check (no dependencies required)
+python -m py_compile wyoming_whisper_trt/*.py
+
+# Full validation (requires dev dependencies)
+python script/format  # Auto-format code (10-30 seconds)
 python script/lint     # Verify code quality - NEVER CANCEL, set 10+ minute timeout
 python script/test     # Run full test suite - NEVER CANCEL, set 30+ minute timeout
+
+# Docker validation
+docker compose config  # Validate Docker configuration (5-10 seconds)
 ```
 
 ## Key Files and Directories
