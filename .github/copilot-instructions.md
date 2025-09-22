@@ -185,10 +185,10 @@ These commands help verify the codebase integrity before committing to long buil
 - **NVIDIA PyPI** (pypi.nvidia.com): Successfully accessible - TensorRT packages install correctly
 - **PyTorch Index** (download.pytorch.org): Successfully accessible - PyTorch with CUDA installs correctly
 
-**❌ Still Blocked Network Access:**
-- **PyPI** (pypi.org): Still experiencing `ReadTimeoutError` - Wyoming Protocol, OpenAI Whisper, and development tools cannot be installed
+**⚠️ Partially Working Network Access:**
+- **PyPI** (pypi.org): Intermittent access - Some packages install successfully, but experiencing timeout issues with larger installations
 
-If you see `pip._vendor.urllib3.exceptions.ReadTimeoutError: HTTPSConnectionPool(host='pypi.org', port=443)`, this indicates PyPI access is still restricted. The build process requires:
+If you see `pip._vendor.urllib3.exceptions.ReadTimeoutError: HTTPSConnectionPool(host='pypi.org', port=443)`, this indicates PyPI access is still experiencing reliability issues. The build process requires:
 - Stable internet connection with high bandwidth  
 - Access to multiple package repositories simultaneously
 - No firewall restrictions on HTTPS traffic to all package indexes
@@ -196,9 +196,10 @@ If you see `pip._vendor.urllib3.exceptions.ReadTimeoutError: HTTPSConnectionPool
 **Partial Build Capability**: With current access, you can install:
 - TensorRT packages (tensorrt-cu12-bindings, etc.)
 - PyTorch with CUDA support
-- But NOT: Wyoming Protocol, OpenAI Whisper, development tools (black, isort, pytest)
+- Some PyPI packages (intermittently): Wyoming Protocol, development tools (black, isort, pytest)
+- But NOT reliably: OpenAI Whisper, complex dependency chains
 
-**Recommended Approach**: Continue using Docker builds or pre-built container images until full PyPI access is available.
+**Recommended Approach**: Continue using Docker builds or pre-built container images for reliable full builds. Individual package installations may work with retries.
 
 ## GPU and CUDA Requirements
 
