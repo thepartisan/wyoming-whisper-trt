@@ -188,6 +188,8 @@ These commands help verify the codebase integrity before committing to long buil
 **⚠️ Partially Working Network Access:**
 - **PyPI** (pypi.org): Intermittent access - Some packages install successfully, but experiencing timeout issues with larger installations
 
+**Note**: Network connectivity issues may be related to known limitations of the GitHub Copilot coding agent environment. See [GitHub Community Discussion #171978](https://github.com/orgs/community/discussions/171978) for more context.
+
 If you see `pip._vendor.urllib3.exceptions.ReadTimeoutError: HTTPSConnectionPool(host='pypi.org', port=443)`, this indicates PyPI access is still experiencing reliability issues. The build process requires:
 - Stable internet connection with high bandwidth  
 - Access to multiple package repositories simultaneously
